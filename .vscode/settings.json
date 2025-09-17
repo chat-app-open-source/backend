@@ -42,7 +42,7 @@
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
   "prettier.singleQuote": true,
-  "prettier.trailingComma": "es5",
+  "prettier.trailingComma": "all",
   "prettier.semi": true,
   "prettier.arrowParens": "avoid",
   "prettier.printWidth": 100,
@@ -70,8 +70,8 @@
     "**/.git": true,
     "**/.DS_Store": true,
     "**/node_modules": true,
-    "**/dist": true,
-    "**/logs": true,
+    // "**/dist": true,
+    // "**/logs": true,
     "**/*.log": true
   },
   "files.watcherExclude": {

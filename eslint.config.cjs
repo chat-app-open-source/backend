@@ -1,73 +1,59 @@
-const eslintPluginImport = require('eslint-plugin-import');
-const eslintPluginTs = require('@typescript-eslint/eslint-plugin');
-const parserTs = require('@typescript-eslint/parser');
-const prettier = require('eslint-plugin-prettier');
+const eslintPluginImport = require("eslint-plugin-import");
+const eslintPluginTs = require("@typescript-eslint/eslint-plugin");
+const parserTs = require("@typescript-eslint/parser");
 
-/** @type {import("eslint").Linter.FlatConfig[]} */
+/** @type {import("eslint").FlatConfig[]} */
 module.exports = [
   {
-    files: ['src/**/*.ts'],
-    ignores: ['dist/**', 'node_modules/**'],
+    files: ["src/**/*.ts"],
     languageOptions: {
       parser: parserTs,
       parserOptions: {
-        project: './tsconfig.json',
-        sourceType: 'module',
-        ecmaVersion: 'latest',
+        project: "./tsconfig.json",
+        sourceType: "module",
       },
     },
     plugins: {
-      '@typescript-eslint': eslintPluginTs,
+      "@typescript-eslint": eslintPluginTs,
       import: eslintPluginImport,
-      prettier,
     },
     rules: {
-      /* Prettier Integration */
-      'prettier/prettier': 'error',
-
-      /* TypeScript Rules */
-      '@typescript-eslint/explicit-function-return-type': 'off',
-      '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/no-unused-vars': [
-        'error',
+      "@typescript-eslint/explicit-function-return-type": "off",
+      "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
         {
-          args: 'all',
-          argsIgnorePattern: '^_',
-          caughtErrors: 'all',
-          caughtErrorsIgnorePattern: '^_',
-          destructuredArrayIgnorePattern: '^_',
-          varsIgnorePattern: '^_',
+          args: "all",
+          argsIgnorePattern: "^_",
+          caughtErrors: "all",
+          caughtErrorsIgnorePattern: "^_",
+          destructuredArrayIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
           ignoreRestSiblings: true,
         },
       ],
-
-      /* Import Rules */
-      'import/order': [
-        'error',
+      "import/order": [
+        "error",
         {
           alphabetize: {
-            order: 'asc',
-            caseInsensitive: true,
+            order: "asc",
           },
-          groups: ['builtin', 'external', 'internal', ['parent', 'sibling', 'index']],
-          'newlines-between': 'always',
         },
       ],
-
-      /* General Best Practices */
-      'no-console': 'warn',
-      'no-extra-semi': 'error',
-      quotes: ['error', 'single', { allowTemplateLiterals: true }],
-      semi: ['error', 'always'],
-      'comma-dangle': ['error', 'always-multiline'],
-      indent: ['error', 2],
-      'prefer-const': 'error',
-      'no-var': 'error',
-      'prefer-template': 'error',
-      'object-shorthand': 'error',
-      'arrow-body-style': ['error', 'as-needed'],
-      'arrow-parens': ['error', 'always'],
-      '@typescript-eslint/no-use-before-define': 'off',
+      // Avoid hardcoded labels
+      "no-console": "error",
+      "no-extra-semi": "error",
+      quotes: ["error", "single", { allowTemplateLiterals: true }],
+      semi: ["error", "always"],
+      "comma-dangle": ["error", "always-multiline"],
+      indent: ["error", 2],
+      "prefer-const": "off",
+      "no-var": "error",
+      "prefer-template": "error",
+      "object-shorthand": "error",
+      "arrow-body-style": ["error", "as-needed"],
+      "arrow-parens": ["error", "always"],
+      "@typescript-eslint/no-use-before-define": "off",
     },
   },
 ];

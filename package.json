@@ -1,22 +1,20 @@
 {
   "name": "chat-app-backend",
   "version": "1.0.0",
-  "type": "module",
   "main": "dist/index.js",
   "license": "MIT",
   "engines": {
-    "node": ">=22.19.0",
-    "yarn": ">=1.22.22",
-    "npm": ">=11.6.0"
+    "node": "22.19.0",
+    "yarn": "1.22.22",
+    "npm": "11.6.0"
   },
   "scripts": {
-    "dev": "nodemon --watch src --exec ts-node-esm src/index.ts",
-    "build": "tsc && tsc-alias",
-    "start": "node dist/index.js",
+    "start": "cross-env NODE_ENV=prod node dist/index.js",
+    "dev": "cross-env NODE_ENV=dev nodemon",
+    "build:dev": "tsc",
+    "build": "cross-env NODE_ENV=prod tsc",
     "lint": "eslint src --ext .ts",
-    "lint:fix": "eslint src --ext .ts --fix",
-    "format": "prettier --write .",
-    "type-check": "tsc --noEmit"
+    "lint:fix": "eslint src --ext .ts --fix"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
@@ -26,7 +24,9 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.18.1",
     "multer": "^2.0.2",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
@@ -35,8 +35,11 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.0.0",
     "@types/node": "^24.5.1",
+    "@types/winston": "^2.4.4",
     "@typescript-eslint/eslint-plugin": "^8.44.0",
     "@typescript-eslint/parser": "^8.44.0",
+    "cross-env": "^10.0.0",
+    "dotenv-cli": "^10.0.0",
     "eslint": "^9.35.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",

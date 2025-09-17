@@ -1,32 +1,29 @@
 {
   "compilerOptions": {
-    /* File Layout */
-    "rootDir": "./src",
-    "outDir": "./dist",
-
-    /* Environment Settings */
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "lib": ["ES2022"],
-    "types": ["node", "express"],
-
-    /* Outputs */
+    "target": "ES2020",
+    "module": "commonjs",
+    "lib": ["ES2020"],
     "sourceMap": true,
-    "declaration": true,
-    "declarationMap": true,
-
-    /* Stricter Type Checking */
+    "outDir": "./dist",
+    "rootDir": "./src",
     "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-
-    /* Recommended Options */
+    "noEmitOnError": true,
+    "removeComments": true,
+    "resolveJsonModule": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
+    "noImplicitAny": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
-    "isolatedModules": true
+    "moduleResolution": "node",
+    "baseUrl": "./",
+    "paths": {
+      "*": ["types/*"]
+    }
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["./src/**/*"],
+  "exclude": ["node_modules", "**/*.spec.ts", "**/*.test.ts"]
 }
