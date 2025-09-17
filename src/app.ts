@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import express, { Express, Request, Response } from 'express';
 
-import { logger } from './config';
+import { connectDB, logger } from './config';
 import { errorHandler } from './middlewares';
 import { errorResponse, successResponse } from './utils';
 
@@ -40,8 +40,14 @@ app.use((_req: Request, res: Response) =>
 // Global error handler
 app.use(errorHandler);
 
-// Start server
+// Start server and connect to MongoDB
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
-  logger.info(`🚀 Server running on http://localhost:${PORT}`);
-});
+
+const startServer = async () => {
+  await connectDB();
+  app.listen(PORT, () => {
+    logger.info(`🚀 Server running on http://localhost:${PORT}`);
+  });
+};
+
+startServer();

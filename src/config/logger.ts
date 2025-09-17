@@ -5,13 +5,13 @@ import { config } from 'dotenv';
 import winston from 'winston';
 import 'winston-daily-rotate-file';
 
-// Load environment variables
 config({
   path: path.resolve(process.cwd(), process.env.NODE_ENV === 'dev' ? '.env.dev' : '.env'),
 });
 
 const { combine, timestamp, printf, colorize, errors, json, metadata } = winston.format;
 
+// Define custom log levels
 const levels = {
   error: 0,
   warn: 1,
@@ -20,6 +20,8 @@ const levels = {
   debug: 4,
   socket: 5,
 };
+
+// Define colors for console output
 const colors = {
   error: 'red',
   warn: 'yellow',
@@ -30,11 +32,14 @@ const colors = {
 };
 
 winston.addColors(colors);
+
+// Ensure logs directory exists
 const logsDir = path.join(process.cwd(), 'logs');
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
 
+// Console log format
 const consoleFormat = printf(({ level, message, timestamp, stack, ...meta }) => {
   let log = `${timestamp} [${level}]: ${message}`;
   if (stack) log += `\n${stack}`;
@@ -42,6 +47,7 @@ const consoleFormat = printf(({ level, message, timestamp, stack, ...meta }) => 
   return log;
 });
 
+// File log format
 const fileFormat = printf(({ level, message, timestamp, stack, ...meta }) => {
   const logEntry: any = { timestamp, level, message };
   if (stack) logEntry.stack = stack;
@@ -49,7 +55,7 @@ const fileFormat = printf(({ level, message, timestamp, stack, ...meta }) => {
   return JSON.stringify(logEntry);
 });
 
-// Format function
+// Helper to get combined format
 const getFormat = (isConsole = false) => {
   const formats = [
     timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
@@ -63,13 +69,17 @@ const getFormat = (isConsole = false) => {
   return combine(...formats);
 };
 
+// Winston logger instance
 const logger = winston.createLogger({
   levels,
   level: process.env.LOG_LEVEL || 'info',
   defaultMeta: { service: 'chat-app-backend' },
   format: getFormat(),
   transports: [
+    // Console transport
     new winston.transports.Console({ format: getFormat(true) }),
+
+    // Error logs
     new winston.transports.DailyRotateFile({
       filename: path.join(logsDir, 'error-%DATE%.log'),
       datePattern: 'YYYY-MM-DD',
@@ -81,12 +91,16 @@ const logger = winston.createLogger({
         fileFormat,
       ),
     }),
+
+    // All logs
     new winston.transports.DailyRotateFile({
       filename: path.join(logsDir, 'combined-%DATE%.log'),
       datePattern: 'YYYY-MM-DD',
       maxFiles: '30d',
       format: combine(timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }), fileFormat),
     }),
+
+    // HTTP logs
     new winston.transports.DailyRotateFile({
       filename: path.join(logsDir, 'http-%DATE%.log'),
       datePattern: 'YYYY-MM-DD',
@@ -94,6 +108,8 @@ const logger = winston.createLogger({
       maxFiles: '30d',
       format: combine(timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }), fileFormat),
     }),
+
+    // Socket logs
     new winston.transports.DailyRotateFile({
       filename: path.join(logsDir, 'socket-%DATE%.log'),
       datePattern: 'YYYY-MM-DD',
@@ -104,6 +120,7 @@ const logger = winston.createLogger({
   ],
 });
 
+// Handle uncaught exceptions
 logger.exceptions.handle(
   new winston.transports.DailyRotateFile({
     filename: path.join(logsDir, 'exceptions-%DATE%.log'),
@@ -112,6 +129,7 @@ logger.exceptions.handle(
   }),
 );
 
+// Handle unhandled promise rejections
 logger.rejections.handle(
   new winston.transports.DailyRotateFile({
     filename: path.join(logsDir, 'rejections-%DATE%.log'),
@@ -120,18 +138,14 @@ logger.rejections.handle(
   }),
 );
 
-if (process.env.NODE_ENV !== 'prod') {
-  logger.add(new winston.transports.Console({ format: getFormat(true) }));
-}
-
-// Morgan stream
+// Morgan HTTP logger stream
 export const morganStream = {
   write: (message: string) => {
     logger.http(message.trim());
   },
 };
 
-// Logger factory
+// Contextual logger factory
 export const createLogger = (context: string) => ({
   error: (message: string, meta?: any) => logger.error(message, { ...meta, context }),
   warn: (message: string, meta?: any) => logger.warn(message, { ...meta, context }),
@@ -141,26 +155,7 @@ export const createLogger = (context: string) => ({
   socket: (message: string, meta?: any) => logger.log('socket', message, { ...meta, context }),
 });
 
+// Default contextual logger
 export const defaultLogger = createLogger('app');
-
-export const requestLogger = (req: any, res: any, next: any) => {
-  const start = Date.now();
-
-  res.on('finish', () => {
-    const duration = Date.now() - start;
-    const logMeta = {
-      method: req.method,
-      url: req.url,
-      status: res.statusCode,
-      duration: `${duration}ms`,
-      ip: req.ip || req.connection.remoteAddress,
-      userAgent: req.get('User-Agent'),
-    };
-    if (res.statusCode >= 400) logger.warn('HTTP Request', logMeta);
-    else logger.http('HTTP Request', logMeta);
-  });
-
-  next();
-};
 
 export default logger;
