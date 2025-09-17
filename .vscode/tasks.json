@@ -1,0 +1,59 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Dev Server",
+      "type": "shell",
+      "command": "yarn dev",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$tsc-watch",
+      "detail": "Run server with nodemon + ts-node in watch mode"
+    },
+    {
+      "label": "Build Project",
+      "type": "shell",
+      "command": "yarn build",
+      "group": "build",
+      "problemMatcher": "$tsc",
+      "detail": "Compile TypeScript to dist folder"
+    },
+    {
+      "label": "Run Production",
+      "type": "shell",
+      "command": "yarn start",
+      "group": "none",
+      "detail": "Run compiled JavaScript from dist"
+    },
+    {
+      "label": "Lint",
+      "type": "shell",
+      "command": "yarn lint",
+      "problemMatcher": [],
+      "detail": "Run ESLint check"
+    },
+    {
+      "label": "Lint Fix",
+      "type": "shell",
+      "command": "yarn lint:fix",
+      "problemMatcher": [],
+      "detail": "Run ESLint with auto-fix"
+    },
+    {
+      "label": "Format",
+      "type": "shell",
+      "command": "yarn format",
+      "problemMatcher": [],
+      "detail": "Run Prettier to format all files"
+    },
+    {
+      "label": "Type Check",
+      "type": "shell",
+      "command": "yarn type-check",
+      "problemMatcher": "$tsc",
+      "detail": "Run TypeScript type checking without emitting files"
+    }
+  ]
+}
