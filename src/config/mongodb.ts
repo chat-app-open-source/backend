@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+
 import logger from './logger';
 
 const MONGO_URI = process.env.MONGO_URI || '';

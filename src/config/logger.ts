@@ -1,17 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import fs from 'fs';
 import path from 'path';
-import { config } from 'dotenv';
 import winston from 'winston';
 import 'winston-daily-rotate-file';
 
-config({
-  path: path.resolve(process.cwd(), process.env.NODE_ENV === 'dev' ? '.env.dev' : '.env'),
-});
+// const { combine, timestamp, printf, colorize, errors, json, metadata } = winston.format;
+const { combine, timestamp, printf, colorize, errors, json } = winston.format;
 
-const { combine, timestamp, printf, colorize, errors, json, metadata } = winston.format;
-
-// Define custom log levels
 const levels = {
   error: 0,
   warn: 1,
@@ -21,7 +16,6 @@ const levels = {
   socket: 5,
 };
 
-// Define colors for console output
 const colors = {
   error: 'red',
   warn: 'yellow',
@@ -33,7 +27,6 @@ const colors = {
 
 winston.addColors(colors);
 
-// Ensure logs directory exists
 const logsDir = path.join(process.cwd(), 'logs');
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
@@ -60,7 +53,7 @@ const getFormat = (isConsole = false) => {
   const formats = [
     timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
     errors({ stack: true }),
-    metadata({ fillExcept: ['message', 'level', 'timestamp', 'label'] }),
+    // metadata({ fillExcept: ['message', 'level', 'timestamp', 'label'] }),
   ];
 
   if (isConsole) formats.push(colorize(), consoleFormat);
@@ -73,10 +66,9 @@ const getFormat = (isConsole = false) => {
 const logger = winston.createLogger({
   levels,
   level: process.env.LOG_LEVEL || 'info',
-  defaultMeta: { service: 'chat-app-backend' },
+  // defaultMeta: { service: 'chat-app-backend' },
   format: getFormat(),
   transports: [
-    // Console transport
     new winston.transports.Console({ format: getFormat(true) }),
 
     // Error logs
@@ -155,7 +147,6 @@ export const createLogger = (context: string) => ({
   socket: (message: string, meta?: any) => logger.log('socket', message, { ...meta, context }),
 });
 
-// Default contextual logger
 export const defaultLogger = createLogger('app');
 
 export default logger;
