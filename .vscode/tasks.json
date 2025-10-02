@@ -10,7 +10,19 @@
         "isDefault": true
       },
       "problemMatcher": "$tsc-watch",
-      "detail": "Run server with nodemon + ts-node in watch mode"
+      "detail": "Run server with nodemon + ts-node in watch mode",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "isBackground": false,
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
     },
     {
       "label": "Build Project",
@@ -18,42 +30,97 @@
       "command": "yarn build",
       "group": "build",
       "problemMatcher": "$tsc",
-      "detail": "Compile TypeScript to dist folder"
+      "detail": "Compile TypeScript to dist folder",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "isBackground": false,
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
     },
     {
       "label": "Run Production",
       "type": "shell",
       "command": "yarn start",
       "group": "none",
-      "detail": "Run compiled JavaScript from dist"
+      "detail": "Run compiled JavaScript from dist",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "isBackground": false,
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
     },
     {
       "label": "Lint",
       "type": "shell",
       "command": "yarn lint",
       "problemMatcher": [],
-      "detail": "Run ESLint check"
+      "group": "test",
+      "detail": "Run ESLint check",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "clear": true
+      },
+      "isBackground": false,
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
     },
     {
       "label": "Lint Fix",
       "type": "shell",
       "command": "yarn lint:fix",
       "problemMatcher": [],
-      "detail": "Run ESLint with auto-fix"
+      "group": "build",
+      "detail": "Run ESLint with auto-fix",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "isBackground": false,
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
     },
     {
-      "label": "Format",
+      "label": "🧹 Clean Build",
       "type": "shell",
-      "command": "yarn format",
-      "problemMatcher": [],
-      "detail": "Run Prettier to format all files"
-    },
-    {
-      "label": "Type Check",
-      "type": "shell",
-      "command": "yarn type-check",
-      "problemMatcher": "$tsc",
-      "detail": "Run TypeScript type checking without emitting files"
+      "command": "yarn clean",
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "silent",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "detail": "Clean dist, logs, and coverage directories",
+      "isBackground": false,
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
     }
   ]
 }

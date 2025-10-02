@@ -1,93 +1,190 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { NextFunction, Request, Response } from 'express';
-import passport from 'passport';
+import type { NextFunction, Response } from 'express';
+
 import { logger } from '../config';
+import type { IUserDocument } from '../models';
 import { handleOAuthLogin } from '../services';
-import { IOAuthUser } from '../types';
+import type {
+  FacebookProfile,
+  GoogleProfile,
+  IOAuthUser,
+  PlatformRequest,
+} from '../types/auth.types';
 import { errorResponse, successResponse } from '../utils';
 
-interface GoogleProfile {
-  id: string;
-  displayName: string;
-  name: {
-    familyName: string;
-    givenName: string;
-  };
-  emails: [{ value: string }];
-  photos: [{ value: string }];
-}
+export const googleCallback = async (req: PlatformRequest, res: Response, _next: NextFunction) => {
+  const profile = req.user as unknown as GoogleProfile;
 
-interface FacebookProfile {
-  id: string;
-  displayName: string;
-  name: {
-    familyName: string;
-    givenName: string;
-  };
-  emails: [{ value: string }];
-  photos: [{ value: string }];
-}
+  if (!profile || !profile.id) {
+    logger.error('Google OAuth profile missing after authentication');
+    return errorResponse({
+      res,
+      message: 'Google OAuth profile missing',
+      statusCode: 400,
+    });
+  }
 
-export const googleCallback = async (req: Request, res: Response, next: NextFunction) => {
-  passport.authenticate('google', { session: false }, async (err: any, profile: GoogleProfile) => {
-    if (err || !profile) {
-      logger.error('Google OAuth error', { error: err?.message });
-      return errorResponse({ res, message: 'Google authentication failed', statusCode: 401 });
-    }
+  try {
+    const platform = req.platform || 'web';
+    logger.info(`Google OAuth callback from ${platform}`, {
+      userId: profile.id,
+      email: profile.emails?.[0]?.value,
+      ip: req.ip,
+    });
 
-    try {
-      const oauthUser: IOAuthUser = {
-        oauthId: profile.id,
-        email: profile.emails[0].value,
-        firstName: profile.name.givenName,
-        lastName: profile.name.familyName,
-        profilePicture: profile.photos?.[0]?.value || '',
-      };
+    const oauthUser: IOAuthUser = {
+      oauthId: profile.id,
+      email: profile.emails?.[0]?.value || '',
+      firstName: profile.name?.givenName || '',
+      lastName: profile.name?.familyName || '',
+      profilePicture: profile.photos?.[0]?.value || '',
+    };
 
-      const { user, tokens } = await handleOAuthLogin('google', oauthUser);
-      return successResponse({
-        res,
-        message: 'Google login successful',
-        data: { user: { id: user._id, email: user.email, username: user.username }, tokens },
-      });
-    } catch (error: unknown) {
-      const err = error as Error;
-      logger.error('Google OAuth callback error', { error: err.message });
-      return errorResponse({ res, message: err.message, statusCode: 401 });
-    }
-  })(req, res, next);
+    const { user, tokens } = await handleOAuthLogin(
+      'google',
+      oauthUser,
+      req.ip ?? 'unknown',
+      req.headers['user-agent'] as string | undefined,
+    );
+
+    // Safe type assertion - user is guaranteed to exist from handleOAuthLogin
+    const safeUser = user as IUserDocument;
+
+    // Platform-specific response
+    const responseData = {
+      provider: 'google',
+      platform,
+      user: {
+        id: safeUser.id.toString(),
+        email: safeUser.email,
+        username: safeUser.username,
+        firstName: safeUser.firstName,
+        lastName: safeUser.lastName,
+        profilePicture: safeUser.profilePicture,
+        isVerified: safeUser.isVerified,
+        status: safeUser.status,
+        oauthProvider: safeUser.oauthProvider,
+        createdAt: safeUser.createdAt.toISOString(),
+      },
+      tokens: {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresIn: '1h',
+        refreshExpiresIn: '7d',
+      },
+      // Platform-specific deep link (if needed)
+      ...(platform !== 'web' && {
+        deepLink: `${platform}://auth/success?accessToken=${tokens.accessToken}&platform=${platform}`,
+      }),
+    };
+
+    return successResponse({
+      res,
+      message: `Google login successful on ${platform}`,
+      data: responseData,
+    });
+  } catch (error: unknown) {
+    const err = error as Error;
+    logger.error('Google OAuth processing error', {
+      error: err.message,
+      platform: req.platform,
+      ip: req.ip,
+    });
+    return errorResponse({
+      res,
+      message: `Google OAuth failed: ${err.message}`,
+      statusCode: 401,
+    });
+  }
 };
 
-export const facebookCallback = async (req: Request, res: Response, next: NextFunction) => {
-  passport.authenticate(
-    'facebook',
-    { session: false },
-    async (err: any, profile: FacebookProfile) => {
-      if (err || !profile) {
-        logger.error('Facebook OAuth error', { error: err?.message });
-        return errorResponse({ res, message: 'Facebook authentication failed', statusCode: 401 });
-      }
+export const facebookCallback = async (
+  req: PlatformRequest,
+  res: Response,
+  _next: NextFunction,
+) => {
+  const profile = req.user as unknown as FacebookProfile;
 
-      try {
-        const oauthUser: IOAuthUser = {
-          oauthId: profile.id,
-          email: profile.emails?.[0]?.value || `${profile.id}@facebook.com`,
-          firstName: profile.name.givenName,
-          lastName: profile.name.familyName,
-          profilePicture: profile.photos?.[0]?.value || '',
-        };
+  if (!profile || !profile.id) {
+    logger.error('Facebook OAuth profile missing after authentication');
+    return errorResponse({
+      res,
+      message: 'Facebook OAuth profile missing',
+      statusCode: 400,
+    });
+  }
 
-        const { user, tokens } = await handleOAuthLogin('facebook', oauthUser);
-        return successResponse({
-          res,
-          message: 'Facebook login successful',
-          data: { user: { id: user._id, email: user.email, username: user.username }, tokens },
-        });
-      } catch (error: unknown) {
-        const err = error as Error;
-        logger.error('Facebook OAuth callback error', { error: err.message });
-        return errorResponse({ res, message: err.message, statusCode: 401 });
-      }
-    },
-  )(req, res, next);
+  try {
+    const platform = req.platform || 'web';
+    const email = profile.emails?.[0]?.value || `${profile.id}@facebook.com`;
+
+    logger.info(`Facebook OAuth callback from ${platform}`, {
+      userId: profile.id,
+      email,
+      ip: req.ip,
+    });
+
+    const oauthUser: IOAuthUser = {
+      oauthId: profile.id,
+      email,
+      firstName: profile.name?.givenName || '',
+      lastName: profile.name?.familyName || '',
+      profilePicture: profile.photos?.[0]?.value || '',
+    };
+
+    const { user, tokens } = await handleOAuthLogin(
+      'facebook',
+      oauthUser,
+      req.ip ?? 'unknown',
+      req.headers['user-agent'] as string | undefined,
+    );
+
+    // Safe type assertion - user is guaranteed to exist from handleOAuthLogin
+    const safeUser = user as IUserDocument;
+
+    // Platform-specific response
+    const responseData = {
+      provider: 'facebook',
+      platform,
+      user: {
+        id: safeUser.id.toString(),
+        email: safeUser.email,
+        username: safeUser.username,
+        firstName: safeUser.firstName,
+        lastName: safeUser.lastName,
+        profilePicture: safeUser.profilePicture,
+        isVerified: safeUser.isVerified,
+        status: safeUser.status,
+        oauthProvider: safeUser.oauthProvider,
+        createdAt: safeUser.createdAt.toISOString(),
+      },
+      tokens: {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresIn: '1h',
+        refreshExpiresIn: '7d',
+      },
+      // Platform-specific deep link (if needed)
+      ...(platform !== 'web' && {
+        deepLink: `${platform}://auth/success?accessToken=${tokens.accessToken}&platform=${platform}`,
+      }),
+    };
+
+    return successResponse({
+      res,
+      message: `Facebook login successful on ${platform}`,
+      data: responseData,
+    });
+  } catch (error: unknown) {
+    const err = error as Error;
+    logger.error('Facebook OAuth processing error', {
+      error: err.message,
+      platform: req.platform,
+      ip: req.ip,
+    });
+    return errorResponse({
+      res,
+      message: `Facebook OAuth failed: ${err.message}`,
+      statusCode: 401,
+    });
+  }
 };

@@ -1,9 +1,15 @@
-import mongoose, { Document, Schema } from 'mongoose';
-import { IUser } from '../types/auth.types';
+import type { Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
+
+import type { IUser } from '../types/auth.types';
 import { comparePassword, hashPassword } from '../utils/password.util';
 
 export interface IUserDocument extends IUser, Document {
   comparePassword(candidatePassword: string): Promise<boolean>;
+  isLocked: boolean;
+  lockUntil?: Date;
+  lockReason?: 'excessive_failed_attempts' | 'excessive_successful_logins';
+  lockCount: number;
 }
 
 const userSchema = new Schema<IUserDocument>(
@@ -174,6 +180,21 @@ const userSchema = new Schema<IUserDocument>(
         ref: 'Call',
       },
     ],
+    isLocked: {
+      type: Boolean,
+      default: false,
+    },
+    lockUntil: {
+      type: Date,
+    },
+    lockReason: {
+      type: String,
+      enum: ['excessive_failed_attempts', 'excessive_successful_logins'],
+    },
+    lockCount: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,
@@ -183,6 +204,7 @@ const userSchema = new Schema<IUserDocument>(
 userSchema.index({ oauthProvider: 1, oauthId: 1 });
 userSchema.index({ status: 1 });
 userSchema.index({ lastSeen: 1 });
+userSchema.index({ isLocked: 1, lockUntil: 1 });
 
 userSchema.pre('save', async function (next) {
   if (this.isModified('password') && this.password) {

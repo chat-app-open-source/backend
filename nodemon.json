@@ -2,5 +2,7 @@
   "watch": ["src"],
   "ext": "ts",
   "exec": "yarn lint:fix && ts-node src/app.ts",
-  "ignore": ["src/**/*.spec.ts", "src/**/*.test.ts"]
+  "ignore": ["src/**/*.spec.ts", "src/**/*.test.ts"],
+  "legacyWatch": true,
+  "pollingInterval": 1000
 }

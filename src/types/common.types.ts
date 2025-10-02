@@ -1,5 +1,6 @@
-import { Response } from 'express';
-import { IUserDocument } from './auth.types';
+import type { Response } from 'express';
+
+import type { IUserDocument } from './auth.types';
 
 declare module 'express-serve-static-core' {
   interface Request {

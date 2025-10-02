@@ -1,4 +1,5 @@
-import { NextFunction, Request, Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
+
 import { logger } from '../config';
 import { User } from '../models';
 import {
@@ -23,7 +24,7 @@ export const register = async (req: Request, res: Response, _next: NextFunction)
       res,
       statusCode: 201,
       message: 'User registered successfully. Please check your email for verification.',
-      data: { user: { id: user._id, email: user.email, username: user.username }, otpSent },
+      data: { user: { id: user.id, email: user.email, username: user.username }, otpSent },
     });
   } catch (error: unknown) {
     const err = error as Error;
@@ -39,7 +40,7 @@ export const verifyEmail = async (req: Request, res: Response, _next: NextFuncti
     return successResponse({
       res,
       message: 'Email verified successfully',
-      data: { user: { id: user._id, email: user.email, username: user.username } },
+      data: { user: { id: user.id, email: user.email, username: user.username } },
     });
   } catch (error: unknown) {
     const err = error as Error;
@@ -50,11 +51,11 @@ export const verifyEmail = async (req: Request, res: Response, _next: NextFuncti
 
 export const login = async (req: Request, res: Response, _next: NextFunction) => {
   try {
-    const { user, tokens } = await loginUser(req.body);
+    const { user, tokens } = await loginUser(req.body, req.ip ?? '', req.headers['user-agent']);
     return successResponse({
       res,
       message: 'Login successful',
-      data: { user: { id: user._id, email: user.email, username: user.username }, tokens },
+      data: { user: { id: user.id, email: user.email, username: user.username }, tokens },
     });
   } catch (error: unknown) {
     const err = error as Error;
@@ -131,7 +132,7 @@ export const resetPasswordController = async (req: Request, res: Response, _next
 
 export const changePassword = async (req: Request, res: Response, _next: NextFunction) => {
   try {
-    if (!req.user || typeof req.user._id !== 'string') {
+    if (!req.user || typeof req.user.id !== 'string') {
       return errorResponse({
         res,
         message: 'User not authenticated',
@@ -140,7 +141,7 @@ export const changePassword = async (req: Request, res: Response, _next: NextFun
     }
 
     const { oldPassword, newPassword } = req.body;
-    const userId = req.user._id;
+    const userId = req.user.id;
 
     await changePasswordService(userId, oldPassword, newPassword);
 
@@ -175,7 +176,7 @@ export const resendVerification = async (req: Request, res: Response, _next: Nex
 
 export const logout = async (req: Request, res: Response, _next: NextFunction) => {
   try {
-    if (!req.user || typeof req.user._id !== 'string') {
+    if (!req.user || typeof req.user.id !== 'string') {
       return errorResponse({
         res,
         message: 'User not authenticated',
@@ -184,7 +185,7 @@ export const logout = async (req: Request, res: Response, _next: NextFunction) =
     }
 
     const { refreshToken } = req.body;
-    const userId = req.user._id;
+    const userId = req.user.id;
 
     let result;
 
@@ -218,7 +219,7 @@ export const logout = async (req: Request, res: Response, _next: NextFunction) =
 
 export const logoutAll = async (req: Request, res: Response, _next: NextFunction) => {
   try {
-    if (!req.user || typeof req.user._id !== 'string') {
+    if (!req.user || typeof req.user.id !== 'string') {
       return errorResponse({
         res,
         message: 'User not authenticated',
@@ -226,7 +227,7 @@ export const logoutAll = async (req: Request, res: Response, _next: NextFunction
       });
     }
 
-    const userId = req.user._id;
+    const userId = req.user.id;
     const result = await logoutAllDevices(userId);
 
     return successResponse({

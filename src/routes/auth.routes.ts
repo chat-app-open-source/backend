@@ -1,9 +1,13 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Router } from 'express';
 import passport from 'passport';
-import { envConfig } from '../config';
+
+import { envConfig, logger } from '../config';
 import {
   changePassword,
+  facebookCallback,
   forgotPassword,
+  googleCallback,
   login,
   logout,
   logoutAll,
@@ -14,7 +18,15 @@ import {
   resetPasswordController as resetPassword,
   verifyEmail,
 } from '../controllers';
-import { authenticate, validate } from '../middlewares';
+import {
+  authenticate,
+  detectPlatform,
+  generateOAuthState,
+  mockFacebookOAuth,
+  mockGoogleOAuth,
+  validate,
+  validateOAuthState,
+} from '../middlewares';
 import {
   changePasswordSchema,
   forgotPasswordSchema,
@@ -30,6 +42,14 @@ import {
 
 const router = Router();
 
+// Apply platform detection to all routes
+router.use(detectPlatform);
+
+// Mock OAuth endpoints for development testing
+router.get('/mock/google', mockGoogleOAuth);
+router.get('/mock/facebook', mockFacebookOAuth);
+
+// Regular auth routes
 router.post('/register', validate(registerSchema), register);
 router.post('/verify-email', validate(verifyEmailSchema), verifyEmail);
 router.post('/login', validate(loginSchema), login);
@@ -42,23 +62,123 @@ router.post('/change-password', authenticate, validate(changePasswordSchema), ch
 router.post('/logout', authenticate, validate(logoutSchema), logout);
 router.post('/logout-all', authenticate, logoutAll);
 
-// OAuth routes
-router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+// Platform-aware OAuth routes
+router.get('/google', (req: any, res: any, next: any) => {
+  const platformReq = req as any;
+  const platform = platformReq.platform || 'web';
+  const state = generateOAuthState(platformReq);
+
+  logger.info(`🔐 Google OAuth initiated from ${platform}`, {
+    ip: req.ip,
+    userAgent: req.headers['user-agent']?.substring(0, 100),
+    stateLength: state.length,
+  });
+
+  passport.authenticate('google', {
+    scope: ['profile', 'email'],
+    state,
+  })(req, res, next);
+});
+
 router.get(
   '/google/callback',
-  passport.authenticate('google', { session: false, failureRedirect: '/login' }),
-  (_req, res) => {
-    res.redirect(`${envConfig.clientUrl}/auth/callback?provider=google&success=true`);
+  passport.authenticate('google', {
+    session: false,
+    failureRedirect: `${envConfig.clientUrl}/login?error=google_auth_failed`,
+  }),
+  (req: any, res: any, next: any) => {
+    const platformReq = req as any;
+
+    // Validate state
+    if (req.query.state) {
+      const stateValid = validateOAuthState(platformReq, req.query.state as string);
+      if (!stateValid) {
+        logger.warn('Google OAuth state validation failed', {
+          ip: req.ip,
+          userAgent: req.headers['user-agent']?.substring(0, 100),
+        });
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid or expired OAuth state',
+          error: 'STATE_INVALID',
+        });
+      }
+    }
+
+    logger.info('Google OAuth state validated successfully', {
+      platform: platformReq.platform,
+      ip: req.ip,
+    });
+
+    return next();
   },
+  googleCallback,
 );
 
-router.get('/facebook', passport.authenticate('facebook', { scope: ['email'] }));
+router.get('/facebook', (req: any, res: any, next: any) => {
+  const platformReq = req as any;
+  const platform = platformReq.platform || 'web';
+  const state = generateOAuthState(platformReq);
+
+  logger.info(`🔐 Facebook OAuth initiated from ${platform}`, {
+    ip: req.ip,
+    userAgent: req.headers['user-agent']?.substring(0, 100),
+    stateLength: state.length,
+  });
+
+  passport.authenticate('facebook', {
+    scope: ['email'],
+    state,
+  })(req, res, next);
+});
+
 router.get(
   '/facebook/callback',
-  passport.authenticate('facebook', { session: false, failureRedirect: '/login' }),
-  (_req, res) => {
-    res.redirect(`${envConfig.clientUrl}/auth/callback?provider=facebook&success=true`);
+  passport.authenticate('facebook', {
+    session: false,
+    failureRedirect: `${envConfig.clientUrl}/login?error=facebook_auth_failed`,
+  }),
+  (req: any, res: any, next: any) => {
+    const platformReq = req as any;
+
+    // Validate state
+    if (req.query.state) {
+      const stateValid = validateOAuthState(platformReq, req.query.state as string);
+      if (!stateValid) {
+        logger.warn('Facebook OAuth state validation failed', {
+          ip: req.ip,
+          userAgent: req.headers['user-agent']?.substring(0, 100),
+        });
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid or expired OAuth state',
+          error: 'STATE_INVALID',
+        });
+      }
+    }
+
+    logger.info('Facebook OAuth state validated successfully', {
+      platform: platformReq.platform,
+      ip: req.ip,
+    });
+
+    return next();
   },
+  facebookCallback,
 );
+
+// Platform info endpoint (for testing)
+router.get('/platform-info', (req: any, res: any) => {
+  const platformReq = req as any;
+
+  res.json({
+    platform: platformReq.platform || 'unknown',
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+    oauthState: platformReq.oauthState,
+    timestamp: new Date().toISOString(),
+    detectedFrom: req.headers['user-agent'] || 'unknown',
+  });
+});
 
 export default router;

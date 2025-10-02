@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import fs from 'fs';
 import path from 'path';
+
 import winston from 'winston';
 import 'winston-daily-rotate-file';
 
-// const { combine, timestamp, printf, colorize, errors, json, metadata } = winston.format;
 const { combine, timestamp, printf, colorize, errors, json } = winston.format;
 
 const levels = {
@@ -50,11 +50,7 @@ const fileFormat = printf(({ level, message, timestamp, stack, ...meta }) => {
 
 // Helper to get combined format
 const getFormat = (isConsole = false) => {
-  const formats = [
-    timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-    errors({ stack: true }),
-    // metadata({ fillExcept: ['message', 'level', 'timestamp', 'label'] }),
-  ];
+  const formats = [timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }), errors({ stack: true })];
 
   if (isConsole) formats.push(colorize(), consoleFormat);
   else formats.push(json());
@@ -66,7 +62,6 @@ const getFormat = (isConsole = false) => {
 const logger = winston.createLogger({
   levels,
   level: process.env.LOG_LEVEL || 'info',
-  // defaultMeta: { service: 'chat-app-backend' },
   format: getFormat(),
   transports: [
     new winston.transports.Console({ format: getFormat(true) }),
