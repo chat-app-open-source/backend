@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ErrorResponseOptions, SuccessResponseOptions } from '../types';
+import type { ErrorResponseOptions, SuccessResponseOptions } from '../types';
 
 export const successResponse = <T = any>({
   res,

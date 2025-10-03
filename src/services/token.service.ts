@@ -1,12 +1,14 @@
-import jwt, { JwtPayload, SignOptions, VerifyOptions } from 'jsonwebtoken';
+import type { JwtPayload, SignOptions, VerifyOptions } from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
+
 import { envConfig, logger } from '../config';
 import { RefreshToken } from '../models';
-import { IAuthTokens } from '../types';
+import type { IAuthTokens } from '../types';
 
 const JWT_CONFIG = {
   secret: envConfig.jwtSecret,
   refreshSecret: envConfig.jwtRefreshSecret,
-  expire: envConfig.jwtExpire || '1h',
+  expire: envConfig.jwtExpire || '15m',
   refreshExpire: envConfig.jwtRefreshExpire || '7d',
   algorithm: 'HS256' as const,
 } as const;
@@ -112,17 +114,17 @@ export const verifyAccessToken = (token: string): JwtPayload => {
     let message = 'Invalid or expired access token';
 
     switch (err.name) {
-    case 'TokenExpiredError':
-      message = 'Access token has expired';
-      break;
-    case 'JsonWebTokenError':
-      message = 'Invalid access token format';
-      break;
-    case 'NotBeforeError':
-      message = 'Access token not yet valid';
-      break;
-    default:
-      message = err.message || 'Access token verification failed';
+      case 'TokenExpiredError':
+        message = 'Access token has expired';
+        break;
+      case 'JsonWebTokenError':
+        message = 'Invalid access token format';
+        break;
+      case 'NotBeforeError':
+        message = 'Access token not yet valid';
+        break;
+      default:
+        message = err.message || 'Access token verification failed';
     }
 
     logger.error('Access token verification failed', {
@@ -180,17 +182,17 @@ export const verifyRefreshToken = async (
     let message = 'Invalid or expired refresh token';
 
     switch (err.name) {
-    case 'TokenExpiredError':
-      message = 'Refresh token has expired';
-      break;
-    case 'JsonWebTokenError':
-      message = 'Invalid refresh token format';
-      break;
-    case 'NotBeforeError':
-      message = 'Refresh token not yet valid';
-      break;
-    default:
-      message = err.message || 'Refresh token verification failed';
+      case 'TokenExpiredError':
+        message = 'Refresh token has expired';
+        break;
+      case 'JsonWebTokenError':
+        message = 'Invalid refresh token format';
+        break;
+      case 'NotBeforeError':
+        message = 'Refresh token not yet valid';
+        break;
+      default:
+        message = err.message || 'Refresh token verification failed';
     }
 
     logger.error('Refresh token verification failed', {

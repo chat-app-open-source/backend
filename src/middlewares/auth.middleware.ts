@@ -1,8 +1,16 @@
-import { NextFunction, Request, Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
+
 import { logger } from '../config';
 import { User } from '../models';
 import { verifyAccessToken } from '../services';
+import type { IUserDocument } from '../types';
 import { errorResponse } from '../utils';
+
+declare module 'express-serve-static-core' {
+  interface Request {
+    user?: IUserDocument;
+  }
+}
 
 export const authenticate = async (
   req: Request,
@@ -31,7 +39,7 @@ export const authenticate = async (
     next();
   } catch (error: unknown) {
     const err = error as Error;
-    logger.error('Authentication error', { error: err.message });
+    logger.error('Authentication error', { error: err.message, ip: req.ip });
     errorResponse({ res, message: err.message, statusCode: 401 });
   }
 };

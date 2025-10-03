@@ -1,4 +1,5 @@
-import mongoose from 'mongoose';
+import type { Request } from 'express';
+import type mongoose from 'mongoose';
 
 export interface IUser {
   email: string;
@@ -41,6 +42,10 @@ export interface IUser {
   callHistory: mongoose.Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
+  isLocked: boolean;
+  lockUntil?: Date;
+  lockReason?: 'excessive_failed_attempts' | 'excessive_successful_logins';
+  lockCount: number;
 }
 
 export interface IUserDocument extends IUser, mongoose.Document {
@@ -64,4 +69,49 @@ export interface ITokenPayload {
   userId: string;
   iat?: number;
   exp?: number;
+}
+
+// OAuth Profile Interfaces
+export interface GoogleProfile {
+  id: string;
+  displayName: string;
+  name: {
+    familyName: string;
+    givenName: string;
+  };
+  emails: Array<{
+    value: string;
+    verified: boolean;
+  }>;
+  photos: Array<{
+    value: string;
+  }>;
+  provider: string;
+}
+
+export interface FacebookProfile {
+  id: string;
+  displayName: string;
+  name: {
+    familyName: string;
+    givenName: string;
+  };
+  emails: Array<{
+    value: string;
+  }> | null;
+  photos: Array<{
+    value: string;
+  }> | null;
+  provider: string;
+}
+
+export type PlatformType = 'web' | 'mobile' | 'desktop' | 'unknown';
+
+export interface PlatformRequest extends Request {
+  platform?: PlatformType;
+  oauthState?: {
+    platform: PlatformType;
+    timestamp: number;
+    returnUrl?: string;
+  };
 }

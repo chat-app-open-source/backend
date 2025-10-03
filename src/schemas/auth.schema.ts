@@ -22,7 +22,7 @@ export const registerSchema = z.object({
   dateOfBirth: z
     .string()
     .optional()
-    .refine((val) => !val || !isNaN(Date.parse(val)), {
+    .refine(val => !val || !isNaN(Date.parse(val)), {
       message: 'Invalid date of birth',
     }),
   gender: z.enum(['male', 'female', 'other']).optional(),

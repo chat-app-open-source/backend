@@ -1,10 +1,18 @@
+import mongoose from 'mongoose';
 import { z } from 'zod';
+
 import { logger } from '../config';
-import { IUserDocument, OTP, RefreshToken, User } from '../models';
+import type { IUserDocument } from '../models';
+import { LoginAttempt, OTP, RefreshToken, User } from '../models';
 import { forgotPasswordSchema, loginSchema, registerSchema } from '../schemas';
-import { IAuthTokens } from '../types';
+import type { IAuthTokens } from '../types';
+
 import { sendEmail } from './email.service';
 import { checkOTPStatus, generateOTP, resendOTP, storeOTP, verifyOTP } from './otp.service';
+
+const MINUTE_MS = 60 * 1000;
+const FAILED_ATTEMPT_THRESHOLD = 5;
+const SUCCESS_LOGIN_THRESHOLD = 10;
 
 export const registerUser = async (
   data: z.infer<typeof registerSchema>,
@@ -94,6 +102,8 @@ export const verifyEmailOTP = async (email: string, otp: string): Promise<IUserD
 
 export const loginUser = async (
   data: z.infer<typeof loginSchema>,
+  ip: string,
+  userAgent: string | undefined,
 ): Promise<{
   user: IUserDocument;
   tokens: IAuthTokens;
@@ -104,16 +114,43 @@ export const loginUser = async (
     const user = await User.findOne({ email: validatedData.email }).select('+password');
 
     if (!user) {
+      await logLoginAttempt(validatedData.email, ip, userAgent, false);
       throw new Error('Invalid email or password');
     }
 
-    if (!user.password) {
-      throw new Error('This account uses OAuth. Please login with Google or Facebook.');
+    if (user.isLocked && user.lockUntil && user.lockUntil > new Date()) {
+      await extendLock(user);
+      throw new Error(
+        `Account is locked until ${user.lockUntil.toLocaleString()}. Check your email for details.`,
+      );
     }
 
     const isPasswordValid = await user.comparePassword(validatedData.password);
     if (!isPasswordValid) {
+      await logLoginAttempt(validatedData.email, ip, userAgent, false, user.id.toString());
+      const failedCount = await LoginAttempt.countDocuments({
+        userId: user._id,
+        success: false,
+        timestamp: { $gt: new Date(Date.now() - MINUTE_MS) },
+      });
+      if (failedCount >= FAILED_ATTEMPT_THRESHOLD) {
+        await lockUser(user, 'excessive_failed_attempts');
+        throw new Error(`Account locked due to too many failed attempts. Check your email.`);
+      }
       throw new Error('Invalid email or password');
+    }
+
+    await logLoginAttempt(validatedData.email, ip, userAgent, true, user.id.toString());
+    const successCount = await LoginAttempt.countDocuments({
+      userId: user._id,
+      success: true,
+      timestamp: { $gt: new Date(Date.now() - MINUTE_MS) },
+    });
+    if (successCount >= SUCCESS_LOGIN_THRESHOLD) {
+      await lockUser(user, 'excessive_successful_logins');
+      throw new Error(
+        `Account locked due to too many successful logins in short time. Check your email.`,
+      );
     }
 
     // Check email verification status
@@ -193,7 +230,7 @@ export const forgotPassword = async (
       return { otpSent: false, message: 'If an account exists, a reset link has been sent.' };
     }
 
-    // Check existing OTP status
+    // Check OTP status
     const otpStatus = await checkOTPStatus(validatedEmail.email, 'password_reset');
 
     let otpSent = false;
@@ -305,7 +342,7 @@ export const resendVerificationEmail = async (
       };
     }
 
-    if (user.isVerified) {
+    if (user.isVerified && otpType === 'email_verification') {
       return {
         otpSent: false,
         message: 'Email already verified.',
@@ -381,7 +418,7 @@ export const logoutUser = async (
     if (revokeAll) {
       // Revoke ALL active refresh tokens for this user
       const result = await RefreshToken.updateMany(
-        { userId, isRevoked: false },
+        { userId: user._id, isRevoked: false },
         { isRevoked: true },
       );
       revokedCount = result.modifiedCount;
@@ -396,7 +433,7 @@ export const logoutUser = async (
       const result = await RefreshToken.findOneAndUpdate(
         {
           token: refreshToken,
-          userId,
+          userId: user._id,
           isRevoked: false,
         },
         { isRevoked: true },
@@ -438,6 +475,133 @@ export const logoutUser = async (
   } catch (error) {
     logger.error('Logout failed', {
       userId,
+      error: (error as Error).message,
+    });
+    throw error;
+  }
+};
+
+const logLoginAttempt = async (
+  email: string,
+  ip: string,
+  userAgent: string | undefined,
+  success: boolean,
+  userId?: string,
+): Promise<void> => {
+  try {
+    const attempt = new LoginAttempt({
+      userId: userId ? new mongoose.Types.ObjectId(userId) : undefined,
+      email,
+      ip,
+      userAgent,
+      success,
+      timestamp: new Date(),
+    });
+    await attempt.save();
+    logger.debug('Login attempt logged', { email, success, ip });
+  } catch (error) {
+    logger.error('Failed to log login attempt', {
+      email,
+      success,
+      ip,
+      error: (error as Error).message,
+    });
+  }
+};
+
+const lockUser = async (
+  user: IUserDocument,
+  reason: 'excessive_failed_attempts' | 'excessive_successful_logins',
+): Promise<void> => {
+  try {
+    const baseMinutes = reason === 'excessive_failed_attempts' ? 30 : 20;
+    user.isLocked = true;
+    user.lockUntil = new Date(Date.now() + baseMinutes * MINUTE_MS);
+    user.lockReason = reason;
+    user.lockCount = (user.lockCount || 0) + 1;
+    await user.save();
+
+    const unlockTime = user.lockUntil.toLocaleString();
+    const duration = baseMinutes;
+
+    await sendEmail({
+      to: user.email,
+      subject: 'ChatApp Account Locked - Suspicious Activity Detected',
+      template: 'accountLocked',
+      context: {
+        username: user.username,
+        email: user.email,
+        reason:
+          reason === 'excessive_failed_attempts'
+            ? 'too many failed login attempts'
+            : 'too many successful logins in a short time',
+        unlockTime,
+        duration,
+        lockCount: user.lockCount,
+        isExtended: false,
+        currentYear: new Date().getFullYear(),
+      },
+    });
+
+    logger.warn('Account locked', {
+      userId: user._id,
+      email: user.email,
+      reason,
+      duration,
+      lockCount: user.lockCount,
+    });
+  } catch (error) {
+    logger.error('Failed to lock user account', {
+      userId: user._id,
+      email: user.email,
+      reason,
+      error: (error as Error).message,
+    });
+    throw error;
+  }
+};
+
+const extendLock = async (user: IUserDocument): Promise<void> => {
+  try {
+    if (!user.lockUntil || user.lockUntil <= new Date()) return;
+
+    const additionalMinutes = 10;
+    user.lockUntil = new Date(user.lockUntil.getTime() + additionalMinutes * MINUTE_MS);
+    user.lockCount += 1;
+    await user.save();
+
+    const unlockTime = user.lockUntil.toLocaleString();
+    const duration = additionalMinutes;
+
+    await sendEmail({
+      to: user.email,
+      subject: 'ChatApp Account Lock Extended - Continued Suspicious Activity',
+      template: 'accountLocked',
+      context: {
+        username: user.username,
+        email: user.email,
+        reason:
+          user.lockReason === 'excessive_failed_attempts'
+            ? 'continued failed login attempts during lock'
+            : 'continued activity during lock',
+        unlockTime,
+        duration,
+        lockCount: user.lockCount,
+        isExtended: true,
+        currentYear: new Date().getFullYear(),
+      },
+    });
+
+    logger.warn('Account lock extended', {
+      userId: user._id,
+      email: user.email,
+      additionalMinutes,
+      newLockCount: user.lockCount,
+    });
+  } catch (error) {
+    logger.error('Failed to extend user account lock', {
+      userId: user._id,
+      email: user.email,
       error: (error as Error).message,
     });
     throw error;
