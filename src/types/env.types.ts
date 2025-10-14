@@ -4,20 +4,15 @@ export interface EnvConfig {
   clientUrl: string;
   mongoUri: string;
   apiKey: string;
+  apiKeyRequestLimit: number;
 
-  // JWT Configuration
+  // JWT
   jwtSecret: string;
   jwtRefreshSecret: string;
   jwtExpire: string;
   jwtRefreshExpire: string;
 
-  // Firebase Configuration
-  firebaseProjectId: string;
-  firebasePrivateKey: string;
-  firebaseClientEmail: string;
-  storageBucket: string;
-
-  // Email Configuration
+  // Email
   smtpHost: string;
   smtpPort: number;
   smtpService: string;
@@ -26,24 +21,57 @@ export interface EnvConfig {
   fromEmail: string;
   fromName: string;
 
-  // OAuth Configuration (Main - Fallback)
+  // OAuth
   googleClientId: string;
   googleClientSecret: string;
   facebookAppId: string;
   facebookAppSecret: string;
 
-  // Platform-specific OAuth (Optional)
-  googleClientIdWeb?: string;
-  googleClientIdMobile?: string;
-  facebookAppIdWeb?: string;
-  facebookAppIdMobile?: string;
+  // Firebase
+  firebaseProjectId: string;
+  firebasePrivateKey: string;
+  firebaseClientEmail: string;
+  storageBucket: string;
+
+  // Redis
+  redisHost: string;
+  redisPort: number;
+  redisPassword: string;
+
+  // APNS
+  apnsKeyId: string;
+  apnsTeamId: string;
+  apnsBundleId: string;
+  apnsKey: string;
+
+  // Rate Limiting
+  rateLimitLoginAttempts: number;
+  rateLimitLoginWindowMs: number;
+  rateLimit2FAAttempts: number;
+  rateLimit2FAWindowMs: number;
+
+  // Session Management
+  sessionTTLDays: number;
+  inactiveSessionTimeoutMinutes: number;
 
   // Encryption
   encryptionKey: string;
 
-  // Logging & Development
+  // Logging
   logLevel: string;
   mockOAuthEnabled: boolean;
+
+  // Cleanup
+  apiAttemptRetentionDays: number;
+  loginAttemptRetentionDays: number;
+
+  // WebAuthn Configuration for Biometric (Passkeys)
+  rpId: string;
+  rpName: string;
+  origin: string;
+  expectedOrigins: string[];
+  userVerification: string;
+  attestationType: string;
 }
 
 export interface OAuthConfig {
@@ -51,14 +79,10 @@ export interface OAuthConfig {
     clientID: string;
     clientSecret: string;
     callbackURL: string;
-    webClientID?: string;
-    mobileClientID?: string;
   };
   facebook: {
     clientID: string;
     clientSecret: string;
     callbackURL: string;
-    webClientID?: string;
-    mobileClientID?: string;
   };
 }

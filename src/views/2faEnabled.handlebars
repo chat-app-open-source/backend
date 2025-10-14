@@ -1,0 +1,32 @@
+<h2 class='greeting'>Hi {{username}}! 🔐</h2>
+
+<p class='message'>
+  Two-factor authentication has been successfully enabled for your ChatApp account. Your account is
+  now more secure!
+</p>
+
+<div class='security-note'>
+  <h3>📋 Your Backup Codes</h3>
+  <p>Save these backup codes in a safe place. You can use them if you lose access to your
+    authenticator app:</p>
+  <div
+    style='background: #f8fafc; padding: 1rem; border-radius: 8px; margin: 1rem 0; font-family: monospace;'
+  >
+    {{#each backupCodes}}
+      <div style='padding: 0.25rem 0;'>{{this}}</div>
+    {{/each}}
+  </div>
+  <p><strong>Note:</strong> Each backup code can only be used once.</p>
+</div>
+
+<div class='divider'></div>
+
+<div class='security-note' style='background-color: #f0f9ff; border-left-color: #0ea5e9;'>
+  <h3>💡 Security Tips</h3>
+  <ul style='color: #0369a1; margin: 0; padding-left: 1.25rem; line-height: 1.6;'>
+    <li>Keep your backup codes secure</li>
+    <li>Use a trusted authenticator app</li>
+    <li>Don't share your 2FA codes with anyone</li>
+    <li>Update your recovery options regularly</li>
+  </ul>
+</div>

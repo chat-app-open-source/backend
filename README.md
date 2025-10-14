@@ -33,6 +33,12 @@ docker-compose up -d
 make logs
 # or
 docker-compose logs -f app
+
+# Test Redis
+make test-redis
+
+# Check Redis logs
+make redis-logs
 ```
 
 ### Option 2: Run without Docker

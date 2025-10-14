@@ -1,6 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-
-import { logger } from '../config';
+import logger from '../config/logger';
 import { User } from '../models';
 import {
   changePassword as changePasswordService,
@@ -11,6 +10,10 @@ import {
   registerUser,
   resendVerificationEmail,
   resetPassword,
+  SessionService,
+  subscribeToTopic,
+  unsubscribeFromTopic,
+  verify2FALogin as verify2FALoginService,
   verifyEmailOTP,
   verifyPasswordResetOTP,
   verifyRefreshToken,
@@ -51,16 +54,112 @@ export const verifyEmail = async (req: Request, res: Response, _next: NextFuncti
 
 export const login = async (req: Request, res: Response, _next: NextFunction) => {
   try {
-    const { user, tokens } = await loginUser(req.body, req.ip ?? '', req.headers['user-agent']);
+    const loginResult = await loginUser(req.body, req.ip ?? '', req.headers['user-agent']);
+
+    // Check if 2FA is required
+    if (loginResult.requires2FA) {
+      return successResponse({
+        res,
+        message: '2FA verification required. Please provide your 2FA token.',
+        data: {
+          requires2FA: true,
+          user: {
+            id: loginResult.user.id,
+            email: loginResult.user.email,
+          },
+        },
+      });
+    }
+
+    // Normal login without 2FA - create session
+    const sessionId = await SessionService.createSession({
+      userId: loginResult.user.id,
+      deviceType: req.body.platform || 'web',
+      userAgent: req.headers['user-agent'] || 'unknown',
+      ipAddress: req.ip || 'unknown',
+      lastActivity: new Date(),
+    });
+
     return successResponse({
       res,
       message: 'Login successful',
-      data: { user: { id: user.id, email: user.email, username: user.username }, tokens },
+      data: {
+        user: {
+          id: loginResult.user.id,
+          email: loginResult.user.email,
+          username: loginResult.user.username,
+          twoFactorEnabled: loginResult.user.twoFactorEnabled,
+        },
+        tokens: loginResult.tokens,
+        sessionId,
+      },
     });
   } catch (error: unknown) {
     const err = error as Error;
     logger.error('Login error', { error: err.message });
     return errorResponse({ res, message: err.message, statusCode: 401 });
+  }
+};
+
+// 2FA Login Verification Controller
+export const verify2FALogin = async (req: Request, res: Response, _next: NextFunction) => {
+  try {
+    const { email, token, deviceToken, platform } = req.body;
+
+    if (!email || !token) {
+      return errorResponse({
+        res,
+        message: 'Email and 2FA token are required',
+        statusCode: 400,
+      });
+    }
+
+    const { user, tokens } = await verify2FALoginService(
+      email,
+      token,
+      deviceToken,
+      platform,
+      req.ip,
+      req.headers['user-agent'],
+    );
+
+    // Create session for 2FA login
+    const sessionId = await SessionService.createSession({
+      userId: user.id,
+      deviceType: (platform as 'web' | 'mobile' | 'desktop') || 'web',
+      userAgent: req.headers['user-agent'] || 'unknown',
+      ipAddress: req.ip || 'unknown',
+      lastActivity: new Date(),
+    });
+
+    logger.info('2FA login successful', {
+      userId: user._id,
+      email: user.email,
+      sessionId,
+    });
+
+    return successResponse({
+      res,
+      message: 'Login successful with 2FA',
+      data: {
+        user: {
+          id: user.id,
+          email: user.email,
+          username: user.username,
+          twoFactorEnabled: true,
+        },
+        tokens,
+        sessionId,
+      },
+    });
+  } catch (error: unknown) {
+    const err = error as Error;
+    logger.error('2FA login verification error', { error: err.message });
+    return errorResponse({
+      res,
+      message: err.message,
+      statusCode: 400,
+    });
   }
 };
 
@@ -87,10 +186,10 @@ export const refreshToken = async (req: Request, res: Response, _next: NextFunct
 export const forgotPassword = async (req: Request, res: Response, _next: NextFunction) => {
   try {
     const { email } = req.body;
-    const otpSent = await forgotPass(email);
+    const { otpSent, message } = await forgotPass(email);
     return successResponse({
       res,
-      message: 'Password reset OTP sent to your email.',
+      message,
       data: { otpSent },
     });
   } catch (error: unknown) {
@@ -159,9 +258,7 @@ export const changePassword = async (req: Request, res: Response, _next: NextFun
 export const resendVerification = async (req: Request, res: Response, _next: NextFunction) => {
   try {
     const { email, otpType } = req.body;
-
     const result = await resendVerificationEmail(email, otpType);
-
     return successResponse({
       res,
       message: result.message,
@@ -170,6 +267,60 @@ export const resendVerification = async (req: Request, res: Response, _next: Nex
   } catch (error: unknown) {
     const err = error as Error;
     logger.error('Resend verification error', { error: err.message });
+    return errorResponse({ res, message: err.message, statusCode: 400 });
+  }
+};
+
+export const subscribeTopic = async (req: Request, res: Response, _next: NextFunction) => {
+  try {
+    if (!req.user || typeof req.user.id !== 'string') {
+      return errorResponse({
+        res,
+        message: 'User not authenticated',
+        statusCode: 401,
+      });
+    }
+
+    const { deviceToken, topic } = req.body;
+    const userId = req.user.id;
+
+    await subscribeToTopic(userId, deviceToken, topic);
+
+    return successResponse({
+      res,
+      message: `Successfully subscribed to topic: ${topic}`,
+      data: { userId, topic },
+    });
+  } catch (error: unknown) {
+    const err = error as Error;
+    logger.error('Subscribe topic error', { error: err.message });
+    return errorResponse({ res, message: err.message, statusCode: 400 });
+  }
+};
+
+export const unsubscribeTopic = async (req: Request, res: Response, _next: NextFunction) => {
+  try {
+    if (!req.user || typeof req.user.id !== 'string') {
+      return errorResponse({
+        res,
+        message: 'User not authenticated',
+        statusCode: 401,
+      });
+    }
+
+    const { deviceToken, topic } = req.body;
+    const userId = req.user.id;
+
+    await unsubscribeFromTopic(userId, deviceToken, topic);
+
+    return successResponse({
+      res,
+      message: `Successfully unsubscribed from topic: ${topic}`,
+      data: { userId, topic },
+    });
+  } catch (error: unknown) {
+    const err = error as Error;
+    logger.error('Unsubscribe topic error', { error: err.message });
     return errorResponse({ res, message: err.message, statusCode: 400 });
   }
 };
@@ -184,15 +335,20 @@ export const logout = async (req: Request, res: Response, _next: NextFunction) =
       });
     }
 
-    const { refreshToken } = req.body;
+    const { refreshToken, clearDeviceTokens, sessionId } = req.body;
     const userId = req.user.id;
 
     let result;
 
+    // Terminate session if sessionId provided
+    if (sessionId) {
+      await SessionService.terminateSession(userId, sessionId);
+    }
+
     if (refreshToken) {
-      result = await logoutCurrentDevice(userId, refreshToken);
+      result = await logoutCurrentDevice(userId, refreshToken, clearDeviceTokens);
     } else {
-      result = await logoutAllDevices(userId);
+      result = await logoutAllDevices(userId, clearDeviceTokens);
     }
 
     return successResponse({
@@ -227,8 +383,16 @@ export const logoutAll = async (req: Request, res: Response, _next: NextFunction
       });
     }
 
+    const { clearDeviceTokens } = req.body;
     const userId = req.user.id;
-    const result = await logoutAllDevices(userId);
+
+    // Terminate all sessions
+    const sessions = await SessionService.getUserSessions(userId);
+    for (const session of sessions) {
+      await SessionService.terminateSession(userId, session.sessionId);
+    }
+
+    const result = await logoutAllDevices(userId, clearDeviceTokens);
 
     return successResponse({
       res,

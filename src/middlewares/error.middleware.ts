@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 
-import { logger } from '../config';
+import logger from '../config/logger';
 
 interface CustomError extends Error {
   statusCode?: number;

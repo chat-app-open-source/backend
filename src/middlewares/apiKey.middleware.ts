@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
-
-import { envConfig, logger } from '../config';
-import { checkApiKeyRateLimit, logApiAttempt } from '../services/rateLimit.service';
+import { envConfig } from '../config/env';
+import logger from '../config/logger';
+import { checkApiKeyRateLimit, logApiAttempt } from '../services';
 import { errorResponse } from '../utils';
 
 export const validateAPIKey = async (
@@ -41,7 +41,7 @@ export const validateAPIKey = async (
 
       errorResponse({
         res,
-        message: `Too many failed API key attempts. Account locked for ${remainingTime} minutes.`,
+        message: `Too many requests. Account locked for ${remainingTime} minutes.`,
         statusCode: 429,
         details: {
           lockUntil: rateLimitInfo.lockUntil?.toISOString(),
@@ -82,7 +82,7 @@ export const validateAPIKey = async (
 
         errorResponse({
           res,
-          message: 'Too many failed API key attempts. Access locked for 5 minutes.',
+          message: `Too many requests. Access locked for 5 minutes.`,
           statusCode: 429,
           details: {
             lockUntil: lockUntil.toISOString(),
@@ -103,7 +103,8 @@ export const validateAPIKey = async (
 };
 
 export const healthCheckBypass = (req: Request, res: Response, next: NextFunction): void => {
-  if (req.path === '/api/health') {
+  if (req.path === '/api/v1/health') {
+    logger.debug('Health check bypassed', { path: req.path });
     next();
     return;
   }

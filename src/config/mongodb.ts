@@ -25,6 +25,16 @@ export const connectDB = async (): Promise<void> => {
   }
 };
 
+export const disconnectDB = async (): Promise<void> => {
+  try {
+    await mongoose.connection.close();
+    logger.info('✅ MongoDB connection closed successfully');
+  } catch (error) {
+    logger.error('❌ Failed to close MongoDB connection', { error: (error as Error).message });
+    throw error;
+  }
+};
+
 mongoose.connection.on('disconnected', () => {
   logger.warn('MongoDB disconnected');
 });

@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   app:
     build: .
@@ -9,6 +11,8 @@ services:
       - NODE_ENV=development
       - PORT=8000
       - CHOKIDAR_USEPOLLING=true
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     volumes:
       - .:/usr/src/app
       - /usr/src/app/node_modules
@@ -16,3 +20,25 @@ services:
     command: yarn dev
     stdin_open: true
     tty: true
+    depends_on:
+      - redis
+    networks:
+      - chatapp-network
+
+  redis:
+    image: redis:7.2-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass chatapp_redis_2025 --bind 0.0.0.0
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - chatapp-network
+
+networks:
+  chatapp-network:
+    driver: bridge
+
+volumes:
+  redis_data:

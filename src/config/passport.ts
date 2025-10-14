@@ -5,7 +5,7 @@ import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 
 import type { PlatformRequest } from '../types/auth.types';
 
-import { oauthConfig } from './env.config';
+import { oauthConfig } from './env';
 import logger from './logger';
 
 // Google Strategy with platform support

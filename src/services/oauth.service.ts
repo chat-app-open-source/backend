@@ -1,9 +1,8 @@
 import mongoose from 'mongoose';
 
-import { logger } from '../config';
-import type { IUserDocument } from '../models';
+import logger from '../config/logger';
 import { LoginAttempt, User } from '../models';
-import type { IAuthTokens, IOAuthUser } from '../types';
+import type { IAuthTokens, IOAuthUser, IUserDocument } from '../types';
 
 import { sendEmail } from './email.service';
 
@@ -60,6 +59,7 @@ const lockUser = async (
       context: {
         username: user.username,
         email: user.email,
+        title: 'ChatApp Account Locked',
         reason: 'too many successful logins in a short time',
         unlockTime,
         duration,

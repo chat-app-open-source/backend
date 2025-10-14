@@ -3,6 +3,9 @@ FROM node:22.19.0-slim
 # Set working directory
 WORKDIR /usr/src/app
 
+# Install Redis client for health check
+RUN apt-get update && apt-get install -y redis-tools && rm -rf /var/lib/apt/lists/*
+
 # Copy package files
 COPY package*.json ./
 COPY yarn.lock ./

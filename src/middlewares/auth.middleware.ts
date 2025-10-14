@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 
-import { logger } from '../config';
+import logger from '../config/logger';
 import { User } from '../models';
 import { verifyAccessToken } from '../services';
 import type { IUserDocument } from '../types';

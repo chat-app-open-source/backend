@@ -1,12 +1,12 @@
 import type { NextFunction, Response } from 'express';
 
-import { logger } from '../config';
-import type { IUserDocument } from '../models';
+import logger from '../config/logger';
 import { handleOAuthLogin } from '../services';
 import type {
   FacebookProfile,
   GoogleProfile,
   IOAuthUser,
+  IUserDocument,
   PlatformRequest,
 } from '../types/auth.types';
 import { errorResponse, successResponse } from '../utils';

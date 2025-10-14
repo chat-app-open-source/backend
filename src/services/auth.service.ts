@@ -1,14 +1,15 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import mongoose from 'mongoose';
 import { z } from 'zod';
 
-import { logger } from '../config';
-import type { IUserDocument } from '../models';
+import logger from '../config/logger';
 import { LoginAttempt, OTP, RefreshToken, User } from '../models';
 import { forgotPasswordSchema, loginSchema, registerSchema } from '../schemas';
-import type { IAuthTokens } from '../types';
-
+import type { IAuthTokens, IUserDocument } from '../types';
 import { sendEmail } from './email.service';
 import { checkOTPStatus, generateOTP, resendOTP, storeOTP, verifyOTP } from './otp.service';
+import { PushNotificationService } from './pushNotification.service';
+import { WebAuthnService } from './webauthn.service';
 
 const MINUTE_MS = 60 * 1000;
 const FAILED_ATTEMPT_THRESHOLD = 5;
@@ -35,6 +36,19 @@ export const registerUser = async (
       ...validatedData,
       dateOfBirth: validatedData.dateOfBirth ? new Date(validatedData.dateOfBirth) : undefined,
       isVerified: false,
+      deviceTokens:
+        validatedData.deviceToken && validatedData.platform
+          ? [
+              {
+                token: validatedData.deviceToken,
+                platform: validatedData.platform,
+                createdAt: new Date(),
+              },
+            ]
+          : [],
+      subscribedTopics: validatedData.platform
+        ? [`platform_${validatedData.platform}`, 'all_users']
+        : ['all_users'],
     });
 
     await user.save();
@@ -63,7 +77,14 @@ export const registerUser = async (
         userId: user._id,
         error: (emailError as Error).message,
       });
-      // Don't fail registration if email fails, just log it
+    }
+
+    // Send welcome notification if device token is provided
+    if (validatedData.deviceToken && validatedData.platform) {
+      await PushNotificationService.sendToDevice(validatedData.deviceToken, {
+        title: 'Welcome to ChatApp!',
+        body: `Hello ${validatedData.username}, welcome to ChatApp! Verify your email to get started.`,
+      });
     }
 
     logger.info('User registered successfully', { userId: user._id, email: validatedData.email });
@@ -96,6 +117,14 @@ export const verifyEmailOTP = async (email: string, otp: string): Promise<IUserD
   // Clean up used OTP
   await OTP.deleteOne({ email, type: 'email_verification' });
 
+  // Send notification to user's devices
+  if (user.deviceTokens.length > 0) {
+    await PushNotificationService.sendToUser(user.id, {
+      title: 'Email Verified',
+      body: `Your email has been verified successfully. Enjoy using ChatApp!`,
+    });
+  }
+
   logger.info('Email verified successfully', { userId: user._id, email });
   return user;
 };
@@ -106,7 +135,8 @@ export const loginUser = async (
   userAgent: string | undefined,
 ): Promise<{
   user: IUserDocument;
-  tokens: IAuthTokens;
+  tokens?: IAuthTokens;
+  requires2FA?: boolean;
   otpStatus?: { resent: boolean; message: string };
 }> => {
   try {
@@ -118,6 +148,7 @@ export const loginUser = async (
       throw new Error('Invalid email or password');
     }
 
+    // Check if account is locked
     if (user.isLocked && user.lockUntil && user.lockUntil > new Date()) {
       await extendLock(user);
       throw new Error(
@@ -141,6 +172,8 @@ export const loginUser = async (
     }
 
     await logLoginAttempt(validatedData.email, ip, userAgent, true, user.id.toString());
+
+    // Check for excessive successful logins
     const successCount = await LoginAttempt.countDocuments({
       userId: user._id,
       success: true,
@@ -155,13 +188,10 @@ export const loginUser = async (
 
     // Check email verification status
     if (!user.isVerified) {
-      // Check OTP status
       const otpStatus = await checkOTPStatus(validatedData.email, 'email_verification');
-
       let resentMessage = '';
 
       if (!otpStatus.exists || otpStatus.isExpired || otpStatus.isUsed) {
-        // Resend OTP if it doesn't exist, expired, or used
         try {
           const emailSent = await resendOTP(
             validatedData.email,
@@ -182,21 +212,76 @@ export const loginUser = async (
             'Verification code generation failed. Please try again or contact support.';
         }
       } else if (otpStatus.isValid) {
-        // OTP exists and is valid
         resentMessage = `Your verification code expires in ${Math.ceil(
           (otpStatus.expiresAt!.getTime() - Date.now()) / (1000 * 60),
         )} minutes.`;
       }
 
-      // Throw error with helpful message
-      const errorMessage = otpStatus.isValid
-        ? `Please verify your email first. ${resentMessage}`
-        : `Please verify your email first. ${resentMessage}`;
-
-      throw new Error(errorMessage);
+      throw new Error(
+        otpStatus.isValid
+          ? `Please verify your email first. ${resentMessage}`
+          : `Please verify your email first. ${resentMessage}`,
+      );
     }
 
-    // User is verified, generate tokens
+    // 🔐 CHECK 2FA STATUS - IMPORTANT!
+    if (user.twoFactorEnabled) {
+      logger.info('2FA required for login', {
+        userId: user._id,
+        email: user.email,
+      });
+
+      // Add device token if provided (for push notifications)
+      if (validatedData.deviceToken && validatedData.platform) {
+        if (!user.deviceTokens.some(token => token.token === validatedData.deviceToken)) {
+          user.deviceTokens.push({
+            token: validatedData.deviceToken,
+            platform: validatedData.platform,
+            createdAt: new Date(),
+          });
+        }
+        await user.save();
+      }
+
+      // Return that 2FA is required (don't generate tokens yet)
+      return {
+        user,
+        requires2FA: true,
+      };
+    }
+
+    // If 2FA is not enabled, proceed with normal login
+    // Add device token if provided
+    if (validatedData.deviceToken && validatedData.platform) {
+      if (!user.deviceTokens.some(token => token.token === validatedData.deviceToken)) {
+        user.deviceTokens.push({
+          token: validatedData.deviceToken,
+          platform: validatedData.platform,
+          createdAt: new Date(),
+        });
+      }
+      if (!user.subscribedTopics.includes(`platform_${validatedData.platform}`)) {
+        user.subscribedTopics.push(`platform_${validatedData.platform}`);
+      }
+      if (!user.subscribedTopics.includes('all_users')) {
+        user.subscribedTopics.push('all_users');
+      }
+      await user.save();
+
+      // Subscribe device to default topics
+      await PushNotificationService.subscribeToTopic(
+        user.id,
+        validatedData.deviceToken,
+        'all_users',
+      );
+      await PushNotificationService.subscribeToTopic(
+        user.id,
+        validatedData.deviceToken,
+        `platform_${validatedData.platform}`,
+      );
+    }
+
+    // Generate tokens
     const { generateTokens } = await import('./token.service');
     const tokens = await generateTokens(user.id.toString());
 
@@ -204,8 +289,24 @@ export const loginUser = async (
     user.lastSeen = new Date();
     await user.save();
 
-    logger.info('User logged in successfully', { userId: user._id, email: validatedData.email });
-    return { user, tokens };
+    // Send login notification
+    if (validatedData.deviceToken) {
+      await PushNotificationService.sendToDevice(validatedData.deviceToken, {
+        title: 'New Login',
+        body: `You have successfully logged into ChatApp from ${validatedData.platform || 'unknown'} device.`,
+      });
+    }
+
+    logger.info('User logged in successfully', {
+      userId: user._id,
+      email: validatedData.email,
+      with2FA: false,
+    });
+
+    return {
+      user,
+      tokens,
+    };
   } catch (error) {
     if (error instanceof z.ZodError) {
       throw new Error(`Validation error: ${error.issues[0].message}`);
@@ -215,29 +316,192 @@ export const loginUser = async (
   }
 };
 
+// 2FA login verification
+export const verify2FALogin = async (
+  email: string,
+  token: string,
+  deviceToken?: string,
+  platform?: string,
+  ip?: string,
+  _userAgent?: string,
+): Promise<{ user: IUserDocument; tokens: IAuthTokens }> => {
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    if (!user.twoFactorEnabled) {
+      throw new Error('2FA is not enabled for this account');
+    }
+
+    // Import services
+    const { AdvancedRateLimitService, TwoFactorService } = await import('./index');
+
+    // Check rate limit
+    const rateLimit = await AdvancedRateLimitService.checkRateLimit(email, '2fa');
+    if (!rateLimit.allowed) {
+      throw new Error(
+        `Too many 2FA attempts. Please try again in ${rateLimit.retryAfter} seconds.`,
+      );
+    }
+
+    // Verify 2FA token
+    const isValid = await TwoFactorService.verify2FAToken(user.id, token);
+    if (!isValid) {
+      logger.warn('Invalid 2FA token attempt', {
+        userId: user.id,
+        email,
+        ip,
+      });
+      throw new Error('Invalid 2FA token. Please check your authenticator app and try again.');
+    }
+
+    // Reset rate limit on success
+    await AdvancedRateLimitService.resetRateLimit(email, '2fa');
+
+    // Add device token if provided
+    if (deviceToken && platform) {
+      if (!user.deviceTokens.some(t => t.token === deviceToken)) {
+        user.deviceTokens.push({
+          token: deviceToken,
+          platform: platform as 'web' | 'android' | 'ios',
+          createdAt: new Date(),
+        });
+      }
+      if (!user.subscribedTopics.includes(`platform_${platform}`)) {
+        user.subscribedTopics.push(`platform_${platform}`);
+      }
+      if (!user.subscribedTopics.includes('all_users')) {
+        user.subscribedTopics.push('all_users');
+      }
+    }
+
+    // Generate tokens after successful 2FA verification
+    const { generateTokens } = await import('./token.service');
+    const tokens = await generateTokens(user.id.toString());
+
+    // Update user status
+    user.status = 'online';
+    user.lastSeen = new Date();
+    await user.save();
+
+    logger.info('2FA login successful', {
+      userId: user._id,
+      email: user.email,
+    });
+
+    return { user, tokens };
+  } catch (error) {
+    logger.error('2FA login verification failed', {
+      error: (error as Error).message,
+      email,
+    });
+    throw error;
+  }
+};
+
+/**
+ * Biometric login using WebAuthn
+ */
+export const biometricLogin = async (
+  email: string,
+  response: any,
+  deviceToken?: string,
+  platform?: string,
+  ip?: string,
+  userAgent?: string,
+): Promise<{ user: IUserDocument; tokens: IAuthTokens }> => {
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      await logLoginAttempt(email, ip || 'unknown', userAgent, false);
+      throw new Error('Invalid email or password');
+    }
+
+    // Check if account is locked
+    if (user.isLocked && user.lockUntil && user.lockUntil > new Date()) {
+      await extendLock(user);
+      throw new Error(
+        `Account is locked until ${user.lockUntil.toLocaleString()}. Check your email for details.`,
+      );
+    }
+
+    // Verify WebAuthn authentication
+    const verification = await WebAuthnService.verifyAuthentication(user.id, response);
+    if (!verification.verified) {
+      await logLoginAttempt(email, ip || 'unknown', userAgent, false, user.id);
+      throw new Error('Biometric authentication failed');
+    }
+
+    await logLoginAttempt(email, ip || 'unknown', userAgent, true, user.id);
+
+    // Add device token if provided
+    if (deviceToken && platform) {
+      if (!user.deviceTokens.some(t => t.token === deviceToken)) {
+        user.deviceTokens.push({
+          token: deviceToken,
+          platform: platform as 'web' | 'android' | 'ios',
+          createdAt: new Date(),
+        });
+      }
+      if (!user.subscribedTopics.includes(`platform_${platform}`)) {
+        user.subscribedTopics.push(`platform_${platform}`);
+      }
+      if (!user.subscribedTopics.includes('all_users')) {
+        user.subscribedTopics.push('all_users');
+      }
+    }
+
+    // Generate tokens
+    const { generateTokens } = await import('./token.service');
+    const tokens = await generateTokens(user.id.toString());
+
+    // Update user status
+    user.status = 'online';
+    user.lastSeen = new Date();
+    await user.save();
+
+    // Subscribe to topics if device token provided
+    if (deviceToken && platform) {
+      const { PushNotificationService } = await import('./pushNotification.service');
+      await PushNotificationService.subscribeToTopic(user.id, deviceToken, 'all_users');
+      await PushNotificationService.subscribeToTopic(user.id, deviceToken, `platform_${platform}`);
+    }
+
+    logger.info('Biometric login successful', {
+      userId: user._id,
+      email,
+    });
+
+    return { user, tokens };
+  } catch (error) {
+    logger.error('Biometric login failed', {
+      email,
+      error: (error as Error).message,
+    });
+    throw error;
+  }
+};
+
 export const forgotPassword = async (
   email: string,
 ): Promise<{ otpSent: boolean; message: string }> => {
   try {
     const validatedEmail = forgotPasswordSchema.parse({ email });
-
     const user = await User.findOne({ email: validatedEmail.email });
     if (!user) {
-      // Don't reveal if user exists - security best practice
       logger.info('Password reset requested for non-existent email', {
         email: validatedEmail.email,
       });
       return { otpSent: false, message: 'If an account exists, a reset link has been sent.' };
     }
 
-    // Check OTP status
     const otpStatus = await checkOTPStatus(validatedEmail.email, 'password_reset');
-
     let otpSent = false;
     let message = '';
 
     if (!otpStatus.exists || otpStatus.isExpired || otpStatus.isUsed) {
-      // Generate new OTP if needed
       try {
         otpSent = await resendOTP(validatedEmail.email, 'password_reset', user);
         message = otpSent
@@ -253,11 +517,18 @@ export const forgotPassword = async (
         otpSent = false;
       }
     } else {
-      // OTP exists and is valid
       otpSent = true;
       message = `Your password reset code expires in ${Math.ceil(
         (otpStatus.expiresAt!.getTime() - Date.now()) / (1000 * 60),
       )} minutes.`;
+    }
+
+    // Send notification to user's devices
+    if (otpSent && user.deviceTokens.length > 0) {
+      await PushNotificationService.sendToUser(user.id, {
+        title: 'Password Reset Request',
+        body: 'A password reset request was made for your account. If this was not you, secure your account immediately.',
+      });
     }
 
     logger.info('Password reset processed', {
@@ -298,6 +569,14 @@ export const resetPassword = async (email: string, newPassword: string): Promise
   // Clean up OTP
   await OTP.deleteOne({ email, type: 'password_reset' });
 
+  // Send notification to user's devices
+  if (user.deviceTokens.length > 0) {
+    await PushNotificationService.sendToUser(user.id, {
+      title: 'Password Reset Successful',
+      body: 'Your password has been successfully reset. If this was not you, secure your account immediately.',
+    });
+  }
+
   logger.info('Password reset successfully', { userId: user._id, email });
 };
 
@@ -316,13 +595,20 @@ export const changePassword = async (
     throw new Error('Old password is incorrect');
   }
 
-  // Check if new password is the same as old
   if (await user.comparePassword(newPassword)) {
     throw new Error('New password cannot be the same as old password');
   }
 
   user.password = newPassword;
   await user.save();
+
+  // Send notification to user's devices
+  if (user.deviceTokens.length > 0) {
+    await PushNotificationService.sendToUser(user.id, {
+      title: 'Password Changed',
+      body: 'Your password has been changed successfully.',
+    });
+  }
 
   logger.info('Password changed successfully', { userId });
 };
@@ -349,9 +635,7 @@ export const resendVerificationEmail = async (
       };
     }
 
-    // Check OTP status
     const otpStatus = await checkOTPStatus(validatedEmail, otpType);
-
     let otpSent = false;
     let message = '';
 
@@ -377,6 +661,14 @@ export const resendVerificationEmail = async (
       )} minutes.`;
     }
 
+    // Send notification to user's devices
+    if (otpSent && user.deviceTokens.length > 0) {
+      await PushNotificationService.sendToUser(user.id, {
+        title: 'Verification Code Sent',
+        body: `A new ${otpType === 'email_verification' ? 'email verification' : 'password reset'} code has been sent to your email.`,
+      });
+    }
+
     logger.info('Verification email resent', {
       userId: user._id,
       email: validatedEmail,
@@ -392,20 +684,68 @@ export const resendVerificationEmail = async (
   }
 };
 
+export const subscribeToTopic = async (
+  userId: string,
+  deviceToken: string,
+  topic: string,
+): Promise<void> => {
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  const success = await PushNotificationService.subscribeToTopic(userId, deviceToken, topic);
+  if (!success) {
+    throw new Error('Failed to subscribe to topic');
+  }
+
+  logger.info('Subscribed to topic', {
+    userId,
+    topic,
+    deviceToken: `${deviceToken.substring(0, 10)}...`,
+  });
+};
+
+export const unsubscribeFromTopic = async (
+  userId: string,
+  deviceToken: string,
+  topic: string,
+): Promise<void> => {
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  const success = await PushNotificationService.unsubscribeFromTopic(userId, deviceToken, topic);
+  if (!success) {
+    throw new Error('Failed to unsubscribe from topic');
+  }
+
+  logger.info('Unsubscribed from topic', {
+    userId,
+    topic,
+    deviceToken: `${deviceToken.substring(0, 10)}...`,
+  });
+};
+
 export const logoutAllDevices = async (
   userId: string,
-): Promise<{ message: string; revokedCount: number }> => await logoutUser(userId, undefined, true);
+  clearDeviceTokens: boolean = false,
+): Promise<{ message: string; revokedCount: number }> =>
+  await logoutUser(userId, undefined, true, clearDeviceTokens);
 
 export const logoutCurrentDevice = async (
   userId: string,
   refreshToken: string,
+  clearDeviceTokens: boolean = false,
 ): Promise<{ message: string; revokedCount: number }> =>
-  await logoutUser(userId, refreshToken, false);
+  await logoutUser(userId, refreshToken, false, clearDeviceTokens);
 
 export const logoutUser = async (
   userId: string,
   refreshToken?: string,
   revokeAll: boolean = true,
+  clearDeviceTokens: boolean = false,
 ): Promise<{ message: string; revokedCount: number }> => {
   try {
     const user = await User.findById(userId);
@@ -416,7 +756,6 @@ export const logoutUser = async (
     let revokedCount = 0;
 
     if (revokeAll) {
-      // Revoke ALL active refresh tokens for this user
       const result = await RefreshToken.updateMany(
         { userId: user._id, isRevoked: false },
         { isRevoked: true },
@@ -429,7 +768,6 @@ export const logoutUser = async (
         revokedCount,
       });
     } else if (refreshToken) {
-      // Revoke specific refresh token only
       const result = await RefreshToken.findOneAndUpdate(
         {
           token: refreshToken,
@@ -454,10 +792,35 @@ export const logoutUser = async (
       }
     }
 
-    // Update user status to offline
+    if (clearDeviceTokens) {
+      const oldDeviceTokens = user.deviceTokens.map(token => ({
+        token: token.token,
+        platform: token.platform,
+      }));
+      user.deviceTokens = [];
+      user.subscribedTopics = [];
+      await user.save();
+
+      // Unsubscribe from all topics for old device tokens
+      for (const { token, platform } of oldDeviceTokens) {
+        await PushNotificationService.unsubscribeFromTopic(userId, token, 'all_users');
+        await PushNotificationService.unsubscribeFromTopic(userId, token, `platform_${platform}`);
+      }
+
+      logger.info('All device tokens and subscriptions cleared', { userId, email: user.email });
+    }
+
     user.status = 'offline';
     user.lastSeen = new Date();
     await user.save();
+
+    // Send logout notification
+    if (user.deviceTokens.length > 0) {
+      await PushNotificationService.sendToUser(user.id, {
+        title: 'Logged Out',
+        body: `You have been logged out from ${revokeAll ? 'all devices' : 'this device'}.`,
+      });
+    }
 
     logger.info('User logged out successfully', {
       userId,
@@ -481,7 +844,7 @@ export const logoutUser = async (
   }
 };
 
-const logLoginAttempt = async (
+export const logLoginAttempt = async (
   email: string,
   ip: string,
   userAgent: string | undefined,
@@ -537,11 +900,20 @@ const lockUser = async (
             : 'too many successful logins in a short time',
         unlockTime,
         duration,
+        title: 'ChatApp Account Locked',
         lockCount: user.lockCount,
         isExtended: false,
         currentYear: new Date().getFullYear(),
       },
     });
+
+    // Send notification to user's devices
+    if (user.deviceTokens.length > 0) {
+      await PushNotificationService.sendToUser(user.id, {
+        title: 'Account Locked',
+        body: `Your account has been locked due to ${reason === 'excessive_failed_attempts' ? 'too many failed login attempts' : 'too many successful logins'}. Check your email for details.`,
+      });
+    }
 
     logger.warn('Account locked', {
       userId: user._id,
@@ -580,6 +952,7 @@ const extendLock = async (user: IUserDocument): Promise<void> => {
       context: {
         username: user.username,
         email: user.email,
+        title: 'ChatApp Account Lock Extended',
         reason:
           user.lockReason === 'excessive_failed_attempts'
             ? 'continued failed login attempts during lock'
@@ -591,6 +964,14 @@ const extendLock = async (user: IUserDocument): Promise<void> => {
         currentYear: new Date().getFullYear(),
       },
     });
+
+    // Send notification to user's devices
+    if (user.deviceTokens.length > 0) {
+      await PushNotificationService.sendToUser(user.id, {
+        title: 'Account Lock Extended',
+        body: `Your account lock has been extended due to continued suspicious activity. Check your email for details.`,
+      });
+    }
 
     logger.warn('Account lock extended', {
       userId: user._id,

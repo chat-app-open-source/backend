@@ -1,6 +1,6 @@
 import type { NextFunction, Response } from 'express';
 
-import { logger } from '../config';
+import logger from '../config/logger';
 import type { PlatformRequest, PlatformType } from '../types/auth.types';
 
 export const detectPlatform = (req: PlatformRequest, _res: Response, next: NextFunction): void => {

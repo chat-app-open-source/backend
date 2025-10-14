@@ -5,16 +5,13 @@ import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
 
-import { connectDB, envConfig, logger, morganStream, passport } from './config';
-import { errorHandler } from './middlewares';
-import routes from './routes';
-import { getApiLockStatus, testEmailConnection } from './services';
-import {
-  errorResponse,
-  getApiEndpointsInfo,
-  logAvailableEndpoints,
-  successResponse,
-} from './utils';
+import { errorHandler, healthCheckBypass } from '../middlewares';
+import routes from '../routes';
+import { getApiLockStatus, testEmailConnection } from '../services';
+import { errorResponse, getApiEndpointsInfo, successResponse, testRedisConnection } from '../utils';
+import { envConfig } from './env';
+import logger, { morganStream } from './logger';
+import passport from './passport';
 
 const app: Express = express();
 
@@ -51,18 +48,18 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Initialize passport
 app.use(passport.initialize());
 
+// Apply API key validation middleware (bypasses /api/v1/health)
+app.use(healthCheckBypass);
+
 // ==================== ROUTES ====================
 
-// Use the main routes
-app.use('/api/v1', routes);
-
-// ==================== HEALTH CHECK ====================
-
+// Health check endpoint
 app.get('/api/v1/health', async (req: Request, res: Response) => {
   try {
-    const [emailStatus, rateLimitStatus] = await Promise.all([
+    const [emailStatus, rateLimitStatus, redisStatus] = await Promise.all([
       testEmailConnection(),
       getApiLockStatus(req.ip ?? 'unknown'),
+      testRedisConnection(),
     ]);
 
     const healthData = {
@@ -71,6 +68,7 @@ app.get('/api/v1/health', async (req: Request, res: Response) => {
       environment: envConfig.nodeEnv,
       emailService: emailStatus ? 'connected' : 'disconnected',
       rateLimitStatus: rateLimitStatus?.isLocked ? 'locked' : 'active',
+      redis: redisStatus ? 'connected' : 'disconnected',
       nodeVersion: process.version,
       memoryUsage: process.memoryUsage(),
       apiEndpoints: Object.keys(getApiEndpointsInfo()).length,
@@ -93,6 +91,9 @@ app.get('/api/v1/health', async (req: Request, res: Response) => {
   }
 });
 
+// main routes
+app.use('/api/v1', routes);
+
 // ==================== ERROR HANDLERS ====================
 
 // Catch-all 404 handler
@@ -108,43 +109,4 @@ app.use((req: Request, res: Response) =>
 // Global error handler
 app.use(errorHandler);
 
-// ==================== GRACEFUL SHUTDOWN ====================
-
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received, shutting down gracefully');
-  await connectDB();
-  process.exit(0);
-});
-
-process.on('SIGINT', async () => {
-  logger.info('SIGINT received, shutting down gracefully');
-  await connectDB();
-  process.exit(0);
-});
-
-// ==================== START SERVER ====================
-
-const PORT = envConfig.port;
-
-const startServer = async (): Promise<void> => {
-  try {
-    logger.info('🔄 Starting ChatApp Backend...');
-    await connectDB();
-
-    // Log endpoints after logger is fully initialized
-    logAvailableEndpoints(logger);
-
-    app.listen(PORT, () => {
-      logger.info(`🚀 Server running on http://localhost:${PORT}`);
-      logger.info(`📧 Client URL: ${envConfig.clientUrl}`);
-      logger.info(`🔐 Environment: ${envConfig.nodeEnv}`);
-      logger.info(`🛡️ API Key protection: Enabled with rate limiting`);
-      logger.info(`📊 Total API Endpoints: ${Object.keys(getApiEndpointsInfo()).length}`);
-    });
-  } catch (error) {
-    logger.error('Failed to start server', { error: (error as Error).message });
-    process.exit(1);
-  }
-};
-
-startServer();
+export default app;

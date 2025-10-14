@@ -1,9 +1,10 @@
 import crypto from 'crypto';
 
-import { envConfig, logger } from '../config';
-import type { IUserDocument } from '../models';
+import { envConfig } from '../config/env';
+import logger from '../config/logger';
 import { OTP } from '../models';
 
+import { IUserDocument } from '../types';
 import { sendEmail } from './email.service';
 
 const OTP_LENGTH = 6;

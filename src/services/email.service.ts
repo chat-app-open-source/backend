@@ -3,7 +3,8 @@ import path from 'path';
 import nodemailer from 'nodemailer';
 import hbs from 'nodemailer-express-handlebars';
 
-import { envConfig, logger } from '../config';
+import { envConfig } from '../config/env';
+import logger from '../config/logger';
 
 const transporter = nodemailer.createTransport({
   pool: true,

@@ -1,16 +1,6 @@
-import type { Document } from 'mongoose';
 import mongoose, { Schema } from 'mongoose';
-
-import type { IUser } from '../types/auth.types';
-import { comparePassword, hashPassword } from '../utils/password.util';
-
-export interface IUserDocument extends IUser, Document {
-  comparePassword(candidatePassword: string): Promise<boolean>;
-  isLocked: boolean;
-  lockUntil?: Date;
-  lockReason?: 'excessive_failed_attempts' | 'excessive_successful_logins';
-  lockCount: number;
-}
+import type { IUserDocument } from '../types';
+import { comparePassword, hashPassword } from '../utils';
 
 const userSchema = new Schema<IUserDocument>(
   {
@@ -147,6 +137,18 @@ const userSchema = new Schema<IUserDocument>(
         },
         default: 'everyone',
       },
+      readReceipts: {
+        type: Boolean,
+        default: true,
+      },
+      typingIndicators: {
+        type: Boolean,
+        default: true,
+      },
+      onlineStatus: {
+        type: Boolean,
+        default: true,
+      },
     },
     notificationSettings: {
       messages: { type: Boolean, default: true },
@@ -155,7 +157,57 @@ const userSchema = new Schema<IUserDocument>(
       mentions: { type: Boolean, default: true },
       sound: { type: Boolean, default: true },
       vibration: { type: Boolean, default: true },
+      pushNotifications: { type: Boolean, default: true },
     },
+    securitySettings: {
+      loginAlerts: {
+        type: Boolean,
+        default: true,
+      },
+      passwordChangeAlerts: {
+        type: Boolean,
+        default: true,
+      },
+      newDeviceAlerts: {
+        type: Boolean,
+        default: true,
+      },
+      suspiciousActivityAlerts: {
+        type: Boolean,
+        default: true,
+      },
+      biometricLogin: {
+        type: Boolean,
+        default: false,
+      },
+    },
+    deviceTokens: [
+      {
+        token: {
+          type: String,
+          required: [true, 'Device token is required'],
+          trim: true,
+        },
+        platform: {
+          type: String,
+          enum: {
+            values: ['web', 'android', 'ios'],
+            message: '{VALUE} is not a valid platform',
+          },
+          required: [true, 'Platform is required'],
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+    subscribedTopics: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
     contacts: [
       {
         type: Schema.Types.ObjectId,
@@ -171,7 +223,7 @@ const userSchema = new Schema<IUserDocument>(
     groups: [
       {
         type: Schema.Types.ObjectId,
-        ref: 'Group',
+        ref: 'Conversation',
       },
     ],
     callHistory: [
@@ -195,6 +247,94 @@ const userSchema = new Schema<IUserDocument>(
       type: Number,
       default: 0,
     },
+    // 2FA Fields
+    twoFactorEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    twoFactorSecret: {
+      type: String,
+      select: false,
+    },
+    twoFactorBackupCodes: {
+      type: [String],
+      select: false,
+    },
+    // WebAuthn Credentials
+    credentials: [
+      {
+        id: {
+          type: String,
+          required: true,
+        },
+        publicKey: {
+          type: Buffer,
+          required: true,
+        },
+        counter: {
+          type: Number,
+          default: 0,
+        },
+        transports: [String],
+        deviceType: {
+          type: String,
+          enum: ['web', 'android', 'ios'],
+          default: 'web',
+        },
+        deviceName: {
+          type: String,
+          default: 'Unknown Device',
+        },
+        webauthnUserID: {
+          type: String,
+          required: true,
+        },
+        deviceTypeInternal: {
+          type: String,
+          enum: ['singleDevice', 'multiDevice'],
+          default: 'singleDevice',
+        },
+        backedUp: {
+          type: Boolean,
+          default: false,
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+        lastUsed: Date,
+      },
+    ],
+    // Session Management
+    activeSessions: [
+      {
+        sessionId: {
+          type: String,
+          required: true,
+        },
+        deviceType: {
+          type: String,
+          enum: ['web', 'mobile', 'desktop'],
+          required: true,
+        },
+        userAgent: {
+          type: String,
+          required: true,
+        },
+        ipAddress: {
+          type: String,
+          required: true,
+        },
+        lastActivity: {
+          type: Date,
+          default: Date.now,
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
   },
   {
     timestamps: true,
@@ -205,6 +345,9 @@ userSchema.index({ oauthProvider: 1, oauthId: 1 });
 userSchema.index({ status: 1 });
 userSchema.index({ lastSeen: 1 });
 userSchema.index({ isLocked: 1, lockUntil: 1 });
+userSchema.index({ 'activeSessions.sessionId': 1 });
+userSchema.index({ twoFactorEnabled: 1 });
+userSchema.index({ 'credentials.credentialID': 1 });
 
 userSchema.pre('save', async function (next) {
   if (this.isModified('password') && this.password) {

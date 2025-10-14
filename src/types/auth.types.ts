@@ -1,7 +1,9 @@
 import type { Request } from 'express';
 import type mongoose from 'mongoose';
+import type { Credential } from './webauthn.types';
 
 export interface IUser {
+  _id: mongoose.Types.ObjectId;
   email: string;
   password?: string;
   username: string;
@@ -27,6 +29,9 @@ export interface IUser {
     lastSeen: 'everyone' | 'contacts' | 'nobody';
     profilePhoto: 'everyone' | 'contacts' | 'nobody';
     status: 'everyone' | 'contacts' | 'nobody';
+    readReceipts: boolean;
+    typingIndicators: boolean;
+    onlineStatus: boolean;
   };
   notificationSettings: {
     messages: boolean;
@@ -35,7 +40,21 @@ export interface IUser {
     mentions: boolean;
     sound: boolean;
     vibration: boolean;
+    pushNotifications: boolean;
   };
+  securitySettings: {
+    loginAlerts: boolean;
+    passwordChangeAlerts: boolean;
+    newDeviceAlerts: boolean;
+    suspiciousActivityAlerts: boolean;
+    biometricLogin: boolean;
+  };
+  deviceTokens: Array<{
+    token: string;
+    platform: 'web' | 'android' | 'ios';
+    createdAt: Date;
+  }>;
+  subscribedTopics: string[];
   contacts: mongoose.Types.ObjectId[];
   blockedUsers: mongoose.Types.ObjectId[];
   groups: mongoose.Types.ObjectId[];
@@ -46,9 +65,26 @@ export interface IUser {
   lockUntil?: Date;
   lockReason?: 'excessive_failed_attempts' | 'excessive_successful_logins';
   lockCount: number;
+  // 2FA Fields
+  twoFactorEnabled: boolean;
+  twoFactorSecret?: string;
+  twoFactorBackupCodes?: string[];
+  // WebAuthn Credentials for Biometric
+  credentials: Credential[];
+  // Session Management
+  activeSessions?: Array<{
+    sessionId: string;
+    deviceType: 'web' | 'mobile' | 'desktop';
+    userAgent: string;
+    ipAddress: string;
+    lastActivity: Date;
+    createdAt: Date;
+  }>;
 }
 
 export interface IUserDocument extends IUser, mongoose.Document {
+  _id: mongoose.Types.ObjectId;
+  id: string;
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
@@ -71,7 +107,6 @@ export interface ITokenPayload {
   exp?: number;
 }
 
-// OAuth Profile Interfaces
 export interface GoogleProfile {
   id: string;
   displayName: string;
@@ -113,5 +148,47 @@ export interface PlatformRequest extends Request {
     platform: PlatformType;
     timestamp: number;
     returnUrl?: string;
+  };
+}
+
+// 2FA Types
+export interface TwoFactorSetup {
+  secret: string;
+  qrCode: string;
+  backupCodes: string[];
+}
+
+export interface TwoFactorVerification {
+  success: boolean;
+  backupCodes: string[];
+}
+
+// Rate Limiting Types
+export interface RateLimitConfig {
+  maxAttempts: number;
+  windowMs: number;
+  blockDurationMs: number;
+}
+
+export interface RateLimitResult {
+  allowed: boolean;
+  remaining: number;
+  resetTime: number;
+  retryAfter?: number;
+}
+
+// Session Types
+export interface UserSession {
+  sessionId: string;
+  userId: string;
+  deviceType: 'web' | 'mobile' | 'desktop';
+  userAgent: string;
+  ipAddress: string;
+  lastActivity: Date;
+  createdAt: Date;
+  isActive: boolean;
+  location?: {
+    country?: string;
+    city?: string;
   };
 }

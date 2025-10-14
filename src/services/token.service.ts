@@ -1,7 +1,8 @@
 import type { JwtPayload, SignOptions, VerifyOptions } from 'jsonwebtoken';
 import jwt from 'jsonwebtoken';
 
-import { envConfig, logger } from '../config';
+import { envConfig } from '../config/env';
+import logger from '../config/logger';
 import { RefreshToken } from '../models';
 import type { IAuthTokens } from '../types';
 

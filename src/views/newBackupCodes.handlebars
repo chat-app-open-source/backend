@@ -1,0 +1,19 @@
+<h2 class='greeting'>Hi {{username}}! 🔄</h2>
+
+<p class='message'>
+  New backup codes have been generated for your ChatApp account. Your previous backup codes are no
+  longer valid.
+</p>
+
+<div class='security-note'>
+  <h3>📋 Your New Backup Codes</h3>
+  <p>Save these new backup codes in a safe place:</p>
+  <div
+    style='background: #f8fafc; padding: 1rem; border-radius: 8px; margin: 1rem 0; font-family: monospace;'
+  >
+    {{#each backupCodes}}
+      <div style='padding: 0.25rem 0;'>{{this}}</div>
+    {{/each}}
+  </div>
+  <p><strong>Important:</strong> Your old backup codes no longer work.</p>
+</div>

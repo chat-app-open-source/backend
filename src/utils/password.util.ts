@@ -1,6 +1,5 @@
 import bcrypt from 'bcryptjs';
-
-import { logger } from '../config';
+import logger from '../config/logger';
 
 const SALT_ROUNDS = 12;
 

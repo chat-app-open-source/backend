@@ -2,7 +2,8 @@
 import { Router } from 'express';
 import passport from 'passport';
 
-import { envConfig, logger } from '../config';
+import { envConfig } from '../config/env';
+import logger from '../config/logger';
 import {
   changePassword,
   facebookCallback,
@@ -16,14 +17,15 @@ import {
   register,
   resendVerification,
   resetPasswordController as resetPassword,
+  subscribeTopic,
+  unsubscribeTopic,
+  verify2FALogin,
   verifyEmail,
 } from '../controllers';
 import {
   authenticate,
   detectPlatform,
   generateOAuthState,
-  mockFacebookOAuth,
-  mockGoogleOAuth,
   validate,
   validateOAuthState,
 } from '../middlewares';
@@ -36,6 +38,9 @@ import {
   registerSchema,
   resendOTPSchema,
   resetPasswordSchema,
+  subscribeTopicSchema,
+  unsubscribeTopicSchema,
+  verify2FALoginSchema,
   verifyEmailSchema,
   verifyPasswordResetOTPSchema,
 } from '../schemas';
@@ -45,14 +50,11 @@ const router = Router();
 // Apply platform detection to all routes
 router.use(detectPlatform);
 
-// Mock OAuth endpoints for development testing
-router.get('/mock/google', mockGoogleOAuth);
-router.get('/mock/facebook', mockFacebookOAuth);
-
 // Regular auth routes
 router.post('/register', validate(registerSchema), register);
 router.post('/verify-email', validate(verifyEmailSchema), verifyEmail);
 router.post('/login', validate(loginSchema), login);
+router.post('/verify-2fa-login', validate(verify2FALoginSchema), verify2FALogin);
 router.post('/resend-otp', validate(resendOTPSchema), resendVerification);
 router.post('/refresh-token', validate(refreshTokenSchema), refreshToken);
 router.post('/forgot-password', validate(forgotPasswordSchema), forgotPassword);
@@ -60,7 +62,9 @@ router.post('/verify-password-reset-otp', validate(verifyPasswordResetOTPSchema)
 router.post('/reset-password', validate(resetPasswordSchema), resetPassword);
 router.post('/change-password', authenticate, validate(changePasswordSchema), changePassword);
 router.post('/logout', authenticate, validate(logoutSchema), logout);
-router.post('/logout-all', authenticate, logoutAll);
+router.post('/logout-all', authenticate, validate(logoutSchema), logoutAll);
+router.post('/subscribe-topic', authenticate, validate(subscribeTopicSchema), subscribeTopic);
+router.post('/unsubscribe-topic', authenticate, validate(unsubscribeTopicSchema), unsubscribeTopic);
 
 // Platform-aware OAuth routes
 router.get('/google', (req: any, res: any, next: any) => {
@@ -89,7 +93,6 @@ router.get(
   (req: any, res: any, next: any) => {
     const platformReq = req as any;
 
-    // Validate state
     if (req.query.state) {
       const stateValid = validateOAuthState(platformReq, req.query.state as string);
       if (!stateValid) {
@@ -141,7 +144,6 @@ router.get(
   (req: any, res: any, next: any) => {
     const platformReq = req as any;
 
-    // Validate state
     if (req.query.state) {
       const stateValid = validateOAuthState(platformReq, req.query.state as string);
       if (!stateValid) {

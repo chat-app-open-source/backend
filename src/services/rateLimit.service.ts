@@ -1,8 +1,8 @@
-import { logger } from '../config';
+import { envConfig } from '../config/env';
+import logger from '../config/logger';
 import { ApiAttempt } from '../models';
 
 const MINUTE_MS = 60 * 1000;
-const API_KEY_FAILED_THRESHOLD = 5;
 
 export interface ApiLockInfo {
   isLocked: boolean;
@@ -16,24 +16,16 @@ export const checkApiKeyRateLimit = async (ip: string, apiKey: string): Promise<
   try {
     const oneMinuteAgo = new Date(Date.now() - MINUTE_MS);
 
-    // Count failed attempts in the last minute
-    const failedCount = await ApiAttempt.countDocuments({
+    // Count all attempts (successful or failed) in the last minute
+    const totalAttempts = await ApiAttempt.countDocuments({
       ip,
       apiKey,
-      success: false,
       timestamp: { $gt: oneMinuteAgo },
     });
-
-    // const totalAttempts = await ApiAttempt.countDocuments({
-    //   ip,
-    //   apiKey,
-    //   timestamp: { $gt: oneMinuteAgo },
-    // });
 
     // Check if IP is currently locked
     const recentLocks = await ApiAttempt.find({
       ip,
-      success: false,
       timestamp: { $gt: new Date(Date.now() - 5 * MINUTE_MS) },
     })
       .sort({ timestamp: -1 })
@@ -44,21 +36,22 @@ export const checkApiKeyRateLimit = async (ip: string, apiKey: string): Promise<
     let lockCount = 0;
     let remainingAttempts = 0;
 
-    if (recentLocks.length > 0) {
-      const lastLockTime = recentLocks[0].timestamp;
-      // Calculate lock duration based on previous attempts
+    if (recentLocks.length > 0 && totalAttempts >= envConfig.apiKeyRequestLimit) {
+      const lastAttemptTime = recentLocks[0].timestamp;
+      // Calculate lock duration based on number of attempts
       const baseLockMinutes = 5;
-      const additionalMinutesPerAttempt = 2;
+      const additionalMinutesPerLimit = 2;
       const calculatedLockMinutes =
-        baseLockMinutes + Math.floor(failedCount / 5) * additionalMinutesPerAttempt;
+        baseLockMinutes +
+        Math.floor(totalAttempts / envConfig.apiKeyRequestLimit) * additionalMinutesPerLimit;
 
-      lockUntil = new Date(lastLockTime.getTime() + calculatedLockMinutes * MINUTE_MS);
+      lockUntil = new Date(lastAttemptTime.getTime() + calculatedLockMinutes * MINUTE_MS);
       isLocked = lockUntil > new Date();
-      lockCount = Math.floor(failedCount / 5);
+      lockCount = Math.floor(totalAttempts / envConfig.apiKeyRequestLimit);
     }
 
     if (!isLocked) {
-      remainingAttempts = Math.max(0, API_KEY_FAILED_THRESHOLD - failedCount);
+      remainingAttempts = Math.max(0, envConfig.apiKeyRequestLimit - totalAttempts);
     }
 
     const resetTime = Math.ceil((MINUTE_MS - (Date.now() % MINUTE_MS)) / 1000);
@@ -76,7 +69,7 @@ export const checkApiKeyRateLimit = async (ip: string, apiKey: string): Promise<
     return {
       isLocked: false,
       lockCount: 0,
-      remainingAttempts: API_KEY_FAILED_THRESHOLD,
+      remainingAttempts: envConfig.apiKeyRequestLimit,
       resetTime: 60,
     };
   }
@@ -115,17 +108,15 @@ export const logApiAttempt = async (
 export const getApiLockStatus = async (ip: string): Promise<ApiLockInfo | null> => {
   try {
     const oneMinuteAgo = new Date(Date.now() - MINUTE_MS);
-    const failedCount = await ApiAttempt.countDocuments({
+    const totalAttempts = await ApiAttempt.countDocuments({
       ip,
-      success: false,
       timestamp: { $gt: oneMinuteAgo },
     });
 
-    if (failedCount === 0) return null;
+    if (totalAttempts === 0) return null;
 
     const recentLocks = await ApiAttempt.find({
       ip,
-      success: false,
       timestamp: { $gt: new Date(Date.now() - 5 * MINUTE_MS) },
     })
       .sort({ timestamp: -1 })
@@ -133,21 +124,22 @@ export const getApiLockStatus = async (ip: string): Promise<ApiLockInfo | null> 
 
     if (recentLocks.length === 0) return null;
 
-    const lastLockTime = recentLocks[0].timestamp;
+    const lastAttemptTime = recentLocks[0].timestamp;
     const baseLockMinutes = 5;
-    const additionalMinutesPerAttempt = 2;
+    const additionalMinutesPerLimit = 2;
     const calculatedLockMinutes =
-      baseLockMinutes + Math.floor(failedCount / 5) * additionalMinutesPerAttempt;
+      baseLockMinutes +
+      Math.floor(totalAttempts / envConfig.apiKeyRequestLimit) * additionalMinutesPerLimit;
 
-    const lockUntil = new Date(lastLockTime.getTime() + calculatedLockMinutes * MINUTE_MS);
+    const lockUntil = new Date(lastAttemptTime.getTime() + calculatedLockMinutes * MINUTE_MS);
     const isLocked = lockUntil > new Date();
-    const lockCount = Math.floor(failedCount / 5);
+    const lockCount = Math.floor(totalAttempts / envConfig.apiKeyRequestLimit);
 
     return {
       isLocked,
       lockUntil,
       lockCount,
-      remainingAttempts: isLocked ? 0 : Math.max(0, 5 - failedCount),
+      remainingAttempts: isLocked ? 0 : Math.max(0, envConfig.apiKeyRequestLimit - totalAttempts),
       resetTime: Math.ceil((MINUTE_MS - (Date.now() % MINUTE_MS)) / 1000),
     };
   } catch (error) {
