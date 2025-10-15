@@ -7,6 +7,7 @@ import { LoginAttempt, OTP, RefreshToken, User } from '../models';
 import { forgotPasswordSchema, loginSchema, registerSchema } from '../schemas';
 import type { IAuthTokens, IUserDocument } from '../types';
 import { sendEmail } from './email.service';
+import { E2EEncryptionService } from './encryption.service';
 import { checkOTPStatus, generateOTP, resendOTP, storeOTP, verifyOTP } from './otp.service';
 import { PushNotificationService } from './pushNotification.service';
 import { WebAuthnService } from './webauthn.service';
@@ -20,6 +21,8 @@ export const registerUser = async (
 ): Promise<{ user: IUserDocument; otpSent: boolean }> => {
   try {
     const validatedData = registerSchema.parse(data);
+
+    // Check for existing user
     const existingUser = await User.findOne({
       $or: [{ email: validatedData.email }, { username: validatedData.username }],
     });
@@ -32,32 +35,78 @@ export const registerUser = async (
       );
     }
 
-    const user = new User({
-      ...validatedData,
-      dateOfBirth: validatedData.dateOfBirth ? new Date(validatedData.dateOfBirth) : undefined,
-      isVerified: false,
-      deviceTokens:
-        validatedData.deviceToken && validatedData.platform
-          ? [
-              {
-                token: validatedData.deviceToken,
-                platform: validatedData.platform,
-                createdAt: new Date(),
-              },
-            ]
-          : [],
-      subscribedTopics: validatedData.platform
-        ? [`platform_${validatedData.platform}`, 'all_users']
-        : ['all_users'],
-    });
+    // Generate E2E encryption keys for new user
+    let publicKey = '';
+    let encryptedPrivateKey = '';
+    let keySalt = '';
 
+    try {
+      const { publicKey: generatedPublicKey, privateKey } =
+        await E2EEncryptionService.generateKeyPair();
+      const { encrypted, salt } = await E2EEncryptionService.encryptPrivateKey(
+        privateKey,
+        validatedData.password,
+      );
+
+      publicKey = generatedPublicKey;
+      encryptedPrivateKey = encrypted;
+      keySalt = salt;
+
+      logger.info('E2E encryption keys generated successfully', {
+        email: validatedData.email,
+      });
+    } catch (encryptionError) {
+      logger.warn('E2E encryption failed, proceeding without encryption', {
+        email: validatedData.email,
+        error: (encryptionError as Error).message,
+      });
+      // Continue without encryption keys - user can set them up later
+    }
+
+    // Create user document
+    const userData: any = {
+      email: validatedData.email,
+      password: validatedData.password,
+      username: validatedData.username,
+      firstName: validatedData.firstName,
+      lastName: validatedData.lastName,
+      phoneNumber: validatedData.phoneNumber,
+      dateOfBirth: validatedData.dateOfBirth ? new Date(validatedData.dateOfBirth) : undefined,
+      gender: validatedData.gender,
+      language: validatedData.language || 'en',
+      country: validatedData.country,
+      isVerified: false,
+    };
+
+    // Only add encryption fields if they were successfully generated
+    if (publicKey && encryptedPrivateKey && keySalt) {
+      userData.publicKey = publicKey;
+      userData.privateKeyEncrypted = encryptedPrivateKey;
+      userData.keySalt = keySalt;
+    }
+
+    // Add device tokens if provided
+    if (validatedData.deviceToken && validatedData.platform) {
+      userData.deviceTokens = [
+        {
+          token: validatedData.deviceToken,
+          platform: validatedData.platform,
+          createdAt: new Date(),
+        },
+      ];
+      userData.subscribedTopics = [`platform_${validatedData.platform}`, 'all_users'];
+    } else {
+      userData.subscribedTopics = ['all_users'];
+    }
+
+    const user = new User(userData);
     await user.save();
 
-    // Generate and store OTP
+    // Generate and store OTP for email verification
     const otp = generateOTP();
     await storeOTP(validatedData.email, otp, 'email_verification');
 
-    // Send email
+    // Send verification email
     try {
       await sendEmail({
         to: validatedData.email,
@@ -72,6 +121,11 @@ export const registerUser = async (
           currentYear: new Date().getFullYear(),
         },
       });
+
+      logger.info('Verification email sent successfully', {
+        userId: user._id,
+        email: validatedData.email,
+      });
     } catch (emailError) {
       logger.error('Failed to send verification email', {
         userId: user._id,
@@ -81,19 +135,62 @@ export const registerUser = async (
 
     // Send welcome notification if device token is provided
     if (validatedData.deviceToken && validatedData.platform) {
-      await PushNotificationService.sendToDevice(validatedData.deviceToken, {
-        title: 'Welcome to ChatApp!',
-        body: `Hello ${validatedData.username}, welcome to ChatApp! Verify your email to get started.`,
-      });
+      try {
+        await PushNotificationService.sendToDevice(validatedData.deviceToken, {
+          title: 'Welcome to ChatApp!',
+          body: `Hello ${validatedData.username}, welcome to ChatApp! Verify your email to get started.`,
+          data: {
+            type: 'welcome',
+            userId: user._id.toString(),
+          },
+        });
+
+        logger.info('Welcome notification sent', {
+          userId: user._id,
+          deviceToken: `${validatedData.deviceToken.substring(0, 10)}...`,
+        });
+      } catch (notificationError) {
+        logger.error('Failed to send welcome notification', {
+          userId: user._id,
+          error: (notificationError as Error).message,
+        });
+      }
     }
 
-    logger.info('User registered successfully', { userId: user._id, email: validatedData.email });
-    return { user, otpSent: true };
+    logger.info('User registered successfully', {
+      userId: user._id,
+      email: validatedData.email,
+      username: validatedData.username,
+      hasEncryption: !!publicKey,
+    });
+
+    return {
+      user,
+      otpSent: true,
+    };
   } catch (error) {
     if (error instanceof z.ZodError) {
-      throw new Error(`Validation error: ${error.issues[0].message}`);
+      const errorMessage = `Validation error: ${error.issues[0].message}`;
+      logger.error('Registration validation failed', {
+        errors: error.issues,
+        inputData: {
+          email: data.email,
+          username: data.username,
+          // Don't log password
+        },
+      });
+      throw new Error(errorMessage);
     }
-    logger.error('Registration failed', { error });
+
+    logger.error('Registration failed', {
+      error: (error as Error).message,
+      stack: (error as Error).stack,
+      inputData: {
+        email: data.email,
+        username: data.username,
+      },
+    });
+
     throw error;
   }
 };
@@ -184,6 +281,13 @@ export const loginUser = async (
       throw new Error(
         `Account locked due to too many successful logins in short time. Check your email.`,
       );
+    }
+
+    // Check E2E key rotation
+    if (user.needsKeyRotation()) {
+      logger.info('User E2E keys need rotation', { userId: user._id });
+      // In production, you might want to trigger key rotation here
+      // or notify the client that keys need to be rotated
     }
 
     // Check email verification status
@@ -294,6 +398,12 @@ export const loginUser = async (
       await PushNotificationService.sendToDevice(validatedData.deviceToken, {
         title: 'New Login',
         body: `You have successfully logged into ChatApp from ${validatedData.platform || 'unknown'} device.`,
+        data: {
+          type: 'login',
+          userId: user._id.toString(),
+          platform: validatedData.platform || 'unknown',
+          timestamp: new Date().toISOString(),
+        },
       });
     }
 
@@ -301,6 +411,7 @@ export const loginUser = async (
       userId: user._id,
       email: validatedData.email,
       with2FA: false,
+      e2eEnabled: user.securitySettings?.e2eEncryption,
     });
 
     return {

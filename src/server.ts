@@ -1,17 +1,24 @@
+import http from 'http'; // or https for secure
 import app from './config/app';
 import { envConfig } from './config/env';
 import { initializeFirebase } from './config/firebase';
 import logger from './config/logger';
 import { connectDB, disconnectDB } from './config/mongodb';
 import { redisClient } from './config/redis';
-import { APNSService, SessionService } from './services';
-import { getApiEndpointsInfo, startCleanup } from './utils';
+import { APNSService, SessionService, SocketService } from './services';
+import { getApiEndpointsInfo, logAvailableEndpoints, startCleanup } from './utils';
+
+const server = http.createServer(app);
+
+// Initialize SocketService
+const socketService = new SocketService(server);
 
 // ==================== GRACEFUL SHUTDOWN ====================
 
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
   try {
+    socketService.getIO().close();
     await APNSService.shutdown();
     if (redisClient.getConnectionStatus()) {
       await redisClient.quit();
@@ -26,6 +33,7 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
   try {
+    socketService.getIO().close();
     await APNSService.shutdown();
     if (redisClient.getConnectionStatus()) {
       await redisClient.quit();
@@ -46,7 +54,7 @@ const startServer = async (): Promise<void> => {
     logger.info('🔄 Starting ChatApp Backend...');
 
     // Log endpoints after logger is fully initialized
-    // logAvailableEndpoints(logger);
+    logAvailableEndpoints(logger);
 
     // Connect to MongoDB
     await connectDB();
@@ -55,7 +63,6 @@ const startServer = async (): Promise<void> => {
     // Initialize Firebase
     initializeFirebase();
     logger.info('🔥 Firebase initialization attempted');
-
     const redisConnected = await redisClient.waitForConnection(15000);
 
     if (!redisConnected) {
@@ -89,14 +96,14 @@ const startServer = async (): Promise<void> => {
       logger.info('👥 Session cleanup service started');
     }
 
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       logger.info(`🚀 Server running on http://localhost:${PORT}`);
       logger.info(`📧 Client URL: ${envConfig.clientUrl}`);
       logger.info(`🔐 Environment: ${envConfig.nodeEnv}`);
       logger.info(`🛡️ API Key protection: Enabled with rate limiting`);
       logger.info(`🛒 Redis: ${redisConnected ? 'Connected' : 'Disconnected'}`);
       logger.info(`📱 APNS: ${APNSService ? 'Initialized' : 'Disabled'}`);
-      logger.info(`📊 Total API Endpoints: ${Object.keys(getApiEndpointsInfo()).length}`);
+      logger.info(`🛡️ Total API Endpoints: ${Object.keys(getApiEndpointsInfo()).length}`);
     });
   } catch (error) {
     logger.error('Failed to start server', { error: (error as Error).message });

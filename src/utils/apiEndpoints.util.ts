@@ -6,7 +6,7 @@ export interface ApiEndpointInfo {
   description: string;
   requiresAuth?: boolean;
   requiresApiKey?: boolean;
-  group: string; // New field to categorize endpoints
+  group: string;
 }
 
 // Define endpoint groups
@@ -16,18 +16,22 @@ const ENDPOINT_GROUPS = {
   OAUTH: 'OAuth',
   SESSION: 'Session Management',
   TWO_FACTOR: 'Two-Factor Authentication',
+  CHAT: 'Chat & Messaging',
+  CALL: 'Voice/Video Calls',
+  MEETING: 'Meetings',
+  STORY: 'Stories',
+  FILE: 'File Management',
   HEALTH: 'Health Check',
   UTILITY: 'Utility',
 } as const;
 
-// Define endpoint configurations
+// Define all API endpoints
 const apiEndpoints: Record<string, ApiEndpointInfo> = {
-  // Authentication Endpoints
+  /** ---------------- AUTHENTICATION ---------------- **/
   'POST /api/v1/auth/register': {
     path: '/api/v1/auth/register',
     method: 'POST',
     description: 'Register a new user account with email and password',
-    requiresAuth: false,
     requiresApiKey: true,
     group: ENDPOINT_GROUPS.AUTHENTICATION,
   },
@@ -35,7 +39,6 @@ const apiEndpoints: Record<string, ApiEndpointInfo> = {
     path: '/api/v1/auth/verify-email',
     method: 'POST',
     description: 'Verify user email with OTP',
-    requiresAuth: false,
     requiresApiKey: true,
     group: ENDPOINT_GROUPS.AUTHENTICATION,
   },
@@ -43,7 +46,13 @@ const apiEndpoints: Record<string, ApiEndpointInfo> = {
     path: '/api/v1/auth/login',
     method: 'POST',
     description: 'User login with email and password',
-    requiresAuth: false,
+    requiresApiKey: true,
+    group: ENDPOINT_GROUPS.AUTHENTICATION,
+  },
+  'POST /api/v1/auth/verify-2fa-login': {
+    path: '/api/v1/auth/verify-2fa-login',
+    method: 'POST',
+    description: 'Verify 2FA login code for multi-factor authentication',
     requiresApiKey: true,
     group: ENDPOINT_GROUPS.AUTHENTICATION,
   },
@@ -51,7 +60,6 @@ const apiEndpoints: Record<string, ApiEndpointInfo> = {
     path: '/api/v1/auth/resend-otp',
     method: 'POST',
     description: 'Resend verification OTP for email verification',
-    requiresAuth: false,
     requiresApiKey: true,
     group: ENDPOINT_GROUPS.AUTHENTICATION,
   },
@@ -59,7 +67,6 @@ const apiEndpoints: Record<string, ApiEndpointInfo> = {
     path: '/api/v1/auth/refresh-token',
     method: 'POST',
     description: 'Refresh access token using refresh token',
-    requiresAuth: false,
     requiresApiKey: true,
     group: ENDPOINT_GROUPS.AUTHENTICATION,
   },
@@ -67,7 +74,6 @@ const apiEndpoints: Record<string, ApiEndpointInfo> = {
     path: '/api/v1/auth/forgot-password',
     method: 'POST',
     description: 'Request OTP for password reset',
-    requiresAuth: false,
     requiresApiKey: true,
     group: ENDPOINT_GROUPS.AUTHENTICATION,
   },
@@ -75,15 +81,13 @@ const apiEndpoints: Record<string, ApiEndpointInfo> = {
     path: '/api/v1/auth/verify-password-reset-otp',
     method: 'POST',
     description: 'Verify OTP for password reset',
-    requiresAuth: false,
     requiresApiKey: true,
     group: ENDPOINT_GROUPS.AUTHENTICATION,
   },
   'POST /api/v1/auth/reset-password': {
     path: '/api/v1/auth/reset-password',
     method: 'POST',
-    description: 'Reset password with new password after OTP verification',
-    requiresAuth: false,
+    description: 'Reset password after OTP verification',
     requiresApiKey: true,
     group: ENDPOINT_GROUPS.AUTHENTICATION,
   },
@@ -98,7 +102,7 @@ const apiEndpoints: Record<string, ApiEndpointInfo> = {
   'POST /api/v1/auth/logout': {
     path: '/api/v1/auth/logout',
     method: 'POST',
-    description: 'Logout current device/session',
+    description: 'Logout from current device/session',
     requiresAuth: true,
     requiresApiKey: true,
     group: ENDPOINT_GROUPS.AUTHENTICATION,
@@ -128,187 +132,262 @@ const apiEndpoints: Record<string, ApiEndpointInfo> = {
     group: ENDPOINT_GROUPS.AUTHENTICATION,
   },
 
-  // Biometric Authentication Endpoints
+  /** ---------------- OAUTH ---------------- **/
+  'GET /api/v1/auth/google': {
+    path: '/api/v1/auth/google',
+    method: 'GET',
+    description: 'Initiate Google OAuth flow',
+    group: ENDPOINT_GROUPS.OAUTH,
+  },
+  'GET /api/v1/auth/google/callback': {
+    path: '/api/v1/auth/google/callback',
+    method: 'GET',
+    description: 'Handle Google OAuth callback',
+    group: ENDPOINT_GROUPS.OAUTH,
+  },
+  'GET /api/v1/auth/facebook': {
+    path: '/api/v1/auth/facebook',
+    method: 'GET',
+    description: 'Initiate Facebook OAuth flow',
+    group: ENDPOINT_GROUPS.OAUTH,
+  },
+  'GET /api/v1/auth/facebook/callback': {
+    path: '/api/v1/auth/facebook/callback',
+    method: 'GET',
+    description: 'Handle Facebook OAuth callback',
+    group: ENDPOINT_GROUPS.OAUTH,
+  },
+
+  /** ---------------- BIOMETRIC ---------------- **/
   'POST /api/v1/biometric/login': {
     path: '/api/v1/biometric/login',
     method: 'POST',
-    description: 'Login using biometric authentication (Face ID/Fingerprint)',
-    requiresAuth: false,
+    description: 'Login using biometric authentication',
     requiresApiKey: true,
     group: ENDPOINT_GROUPS.BIOMETRIC,
   },
   'GET /api/v1/biometric/status': {
     path: '/api/v1/biometric/status',
     method: 'GET',
-    description: 'Get biometric authentication status for current user',
+    description: 'Get biometric auth status',
     requiresAuth: true,
-    requiresApiKey: true,
-    group: ENDPOINT_GROUPS.BIOMETRIC,
-  },
-  'GET /api/v1/biometric/credentials': {
-    path: '/api/v1/biometric/credentials',
-    method: 'GET',
-    description: 'Get all registered biometric credentials for current user',
-    requiresAuth: true,
-    requiresApiKey: true,
     group: ENDPOINT_GROUPS.BIOMETRIC,
   },
   'POST /api/v1/biometric/registration/options': {
     path: '/api/v1/biometric/registration/options',
     method: 'POST',
-    description: 'Generate biometric registration options for new device',
+    description: 'Generate biometric registration options',
     requiresAuth: true,
-    requiresApiKey: true,
     group: ENDPOINT_GROUPS.BIOMETRIC,
   },
   'POST /api/v1/biometric/registration/verify': {
     path: '/api/v1/biometric/registration/verify',
     method: 'POST',
-    description: 'Verify and complete biometric registration',
+    description: 'Verify biometric registration',
     requiresAuth: true,
-    requiresApiKey: true,
-    group: ENDPOINT_GROUPS.BIOMETRIC,
-  },
-  'POST /api/v1/biometric/authentication/challenge': {
-    path: '/api/v1/biometric/authentication/challenge',
-    method: 'POST',
-    description: 'Generate biometric authentication challenge',
-    requiresAuth: true,
-    requiresApiKey: true,
-    group: ENDPOINT_GROUPS.BIOMETRIC,
-  },
-  'POST /api/v1/biometric/authentication/verify': {
-    path: '/api/v1/biometric/authentication/verify',
-    method: 'POST',
-    description: 'Verify biometric authentication challenge response',
-    requiresAuth: true,
-    requiresApiKey: true,
     group: ENDPOINT_GROUPS.BIOMETRIC,
   },
   'POST /api/v1/biometric/credentials/remove': {
     path: '/api/v1/biometric/credentials/remove',
     method: 'POST',
-    description: 'Remove a specific biometric credential',
+    description: 'Remove biometric credential',
     requiresAuth: true,
-    requiresApiKey: true,
     group: ENDPOINT_GROUPS.BIOMETRIC,
   },
 
-  // OAuth Endpoints
-  'GET /api/v1/auth/google': {
-    path: '/api/v1/auth/google',
-    method: 'GET',
-    description: 'Initiate Google OAuth login flow',
-    requiresAuth: false,
-    requiresApiKey: false,
-    group: ENDPOINT_GROUPS.OAUTH,
-  },
-  'GET /api/v1/auth/google/callback': {
-    path: '/api/v1/auth/google/callback',
-    method: 'GET',
-    description: 'Handle Google OAuth callback and complete authentication',
-    requiresAuth: false,
-    requiresApiKey: false,
-    group: ENDPOINT_GROUPS.OAUTH,
-  },
-  'GET /api/v1/auth/facebook': {
-    path: '/api/v1/auth/facebook',
-    method: 'GET',
-    description: 'Initiate Facebook OAuth login flow',
-    requiresAuth: false,
-    requiresApiKey: false,
-    group: ENDPOINT_GROUPS.OAUTH,
-  },
-  'GET /api/v1/auth/facebook/callback': {
-    path: '/api/v1/auth/facebook/callback',
-    method: 'GET',
-    description: 'Handle Facebook OAuth callback and complete authentication',
-    requiresAuth: false,
-    requiresApiKey: false,
-    group: ENDPOINT_GROUPS.OAUTH,
-  },
-
-  // Session Management Endpoints
-  'GET /api/v1/sessions': {
-    path: '/api/v1/sessions',
-    method: 'GET',
-    description: 'Retrieve all active sessions for the authenticated user',
-    requiresAuth: true,
-    requiresApiKey: true,
-    group: ENDPOINT_GROUPS.SESSION,
-  },
-  'DELETE /api/v1/sessions/:sessionId': {
-    path: '/api/v1/sessions/:sessionId',
-    method: 'DELETE',
-    description: 'Terminate a specific user session',
-    requiresAuth: true,
-    requiresApiKey: true,
-    group: ENDPOINT_GROUPS.SESSION,
-  },
-  'POST /api/v1/sessions/terminate-others': {
-    path: '/api/v1/sessions/terminate-others',
+  /** ---------------- CHAT ---------------- **/
+  'POST /api/v1/chat/messages/send': {
+    path: '/api/v1/chat/messages/send',
     method: 'POST',
-    description: 'Terminate all sessions except the current one',
+    description: 'Send a chat message',
     requiresAuth: true,
-    requiresApiKey: true,
-    group: ENDPOINT_GROUPS.SESSION,
+    group: ENDPOINT_GROUPS.CHAT,
+  },
+  'GET /api/v1/chat/conversations': {
+    path: '/api/v1/chat/conversations',
+    method: 'GET',
+    description: 'Get user conversations',
+    requiresAuth: true,
+    group: ENDPOINT_GROUPS.CHAT,
+  },
+  'POST /api/v1/chat/encryption/initialize': {
+    path: '/api/v1/chat/encryption/initialize',
+    method: 'POST',
+    description: 'Initialize E2E encryption for chat',
+    requiresAuth: true,
+    group: ENDPOINT_GROUPS.CHAT,
   },
 
-  // Two-Factor Authentication (2FA) Endpoints
+  /** ---------------- CALLS ---------------- **/
+  'POST /api/v1/calls/initiate': {
+    path: '/api/v1/calls/initiate',
+    method: 'POST',
+    description: 'Initiate a call between users',
+    requiresAuth: true,
+    group: ENDPOINT_GROUPS.CALL,
+  },
+  'POST /api/v1/calls/accept': {
+    path: '/api/v1/calls/accept',
+    method: 'POST',
+    description: 'Accept incoming call',
+    requiresAuth: true,
+    group: ENDPOINT_GROUPS.CALL,
+  },
+  'POST /api/v1/calls/reject': {
+    path: '/api/v1/calls/reject',
+    method: 'POST',
+    description: 'Reject incoming call',
+    requiresAuth: true,
+    group: ENDPOINT_GROUPS.CALL,
+  },
+  'POST /api/v1/calls/end': {
+    path: '/api/v1/calls/end',
+    method: 'POST',
+    description: 'End a call',
+    requiresAuth: true,
+    group: ENDPOINT_GROUPS.CALL,
+  },
+
+  /** ---------------- MEETINGS ---------------- **/
+  'POST /api/v1/meetings/create': {
+    path: '/api/v1/meetings/create',
+    method: 'POST',
+    description: 'Create a new meeting',
+    requiresAuth: true,
+    group: ENDPOINT_GROUPS.MEETING,
+  },
+  'POST /api/v1/meetings/join': {
+    path: '/api/v1/meetings/join',
+    method: 'POST',
+    description: 'Join an existing meeting',
+    requiresAuth: true,
+    group: ENDPOINT_GROUPS.MEETING,
+  },
+  'POST /api/v1/meetings/leave': {
+    path: '/api/v1/meetings/leave',
+    method: 'POST',
+    description: 'Leave a meeting',
+    requiresAuth: true,
+    group: ENDPOINT_GROUPS.MEETING,
+  },
+  'GET /api/v1/meetings': {
+    path: '/api/v1/meetings',
+    method: 'GET',
+    description: 'Get all meetings for user',
+    requiresAuth: true,
+    group: ENDPOINT_GROUPS.MEETING,
+  },
+
+  /** ---------------- STORIES ---------------- **/
+  'POST /api/v1/stories/create': {
+    path: '/api/v1/stories/create',
+    method: 'POST',
+    description: 'Create a new story',
+    requiresAuth: true,
+    group: ENDPOINT_GROUPS.STORY,
+  },
+  'POST /api/v1/stories/view': {
+    path: '/api/v1/stories/view',
+    method: 'POST',
+    description: 'View a story',
+    requiresAuth: true,
+    group: ENDPOINT_GROUPS.STORY,
+  },
+  'DELETE /api/v1/stories/delete': {
+    path: '/api/v1/stories/delete',
+    method: 'DELETE',
+    description: 'Delete a story',
+    requiresAuth: true,
+    group: ENDPOINT_GROUPS.STORY,
+  },
+
+  /** ---------------- FILES ---------------- **/
+  'POST /api/v1/files/upload': {
+    path: '/api/v1/files/upload',
+    method: 'POST',
+    description: 'Upload a file (up to 50MB)',
+    requiresAuth: true,
+    group: ENDPOINT_GROUPS.FILE,
+  },
+  'DELETE /api/v1/files/delete': {
+    path: '/api/v1/files/delete',
+    method: 'DELETE',
+    description: 'Delete a user file',
+    requiresAuth: true,
+    group: ENDPOINT_GROUPS.FILE,
+  },
+  'GET /api/v1/files/user': {
+    path: '/api/v1/files/user',
+    method: 'GET',
+    description: 'Get all user files',
+    requiresAuth: true,
+    group: ENDPOINT_GROUPS.FILE,
+  },
+  'GET /api/v1/files/:fileId': {
+    path: '/api/v1/files/:fileId',
+    method: 'GET',
+    description: 'Get file by ID',
+    requiresAuth: true,
+    group: ENDPOINT_GROUPS.FILE,
+  },
+
+  /** ---------------- 2FA ---------------- **/
   'POST /api/v1/2fa/enable': {
     path: '/api/v1/2fa/enable',
     method: 'POST',
-    description: 'Initiate 2FA setup with QR code and backup codes',
+    description: 'Enable 2FA for user',
     requiresAuth: true,
-    requiresApiKey: true,
     group: ENDPOINT_GROUPS.TWO_FACTOR,
   },
   'POST /api/v1/2fa/verify': {
     path: '/api/v1/2fa/verify',
     method: 'POST',
-    description: 'Verify 2FA setup with TOTP token',
+    description: 'Verify 2FA token',
     requiresAuth: true,
-    requiresApiKey: true,
     group: ENDPOINT_GROUPS.TWO_FACTOR,
   },
   'POST /api/v1/2fa/disable': {
     path: '/api/v1/2fa/disable',
     method: 'POST',
-    description: 'Disable 2FA for the authenticated user',
+    description: 'Disable 2FA for user',
     requiresAuth: true,
-    requiresApiKey: true,
-    group: ENDPOINT_GROUPS.TWO_FACTOR,
-  },
-  'POST /api/v1/2fa/backup-codes/generate': {
-    path: '/api/v1/2fa/backup-codes/generate',
-    method: 'POST',
-    description: 'Generate new 2FA backup codes',
-    requiresAuth: true,
-    requiresApiKey: true,
     group: ENDPOINT_GROUPS.TWO_FACTOR,
   },
 
-  // Health Check Endpoint
+  /** ---------------- SESSIONS ---------------- **/
+  'GET /api/v1/sessions': {
+    path: '/api/v1/sessions',
+    method: 'GET',
+    description: 'Get active sessions',
+    requiresAuth: true,
+    group: ENDPOINT_GROUPS.SESSION,
+  },
+  'DELETE /api/v1/sessions/:sessionId': {
+    path: '/api/v1/sessions/:sessionId',
+    method: 'DELETE',
+    description: 'Terminate session by ID',
+    requiresAuth: true,
+    group: ENDPOINT_GROUPS.SESSION,
+  },
+
+  /** ---------------- HEALTH ---------------- **/
   'GET /api/health': {
     path: '/api/health',
     method: 'GET',
-    description: 'Check server health and status',
-    requiresAuth: false,
-    requiresApiKey: false,
+    description: 'Check server health',
     group: ENDPOINT_GROUPS.HEALTH,
   },
 
-  // Utility Endpoint
+  /** ---------------- UTILITY ---------------- **/
   'GET /api/v1/auth/platform-info': {
     path: '/api/v1/auth/platform-info',
     method: 'GET',
-    description: 'Get platform information for the current request (for testing)',
-    requiresAuth: false,
-    requiresApiKey: false,
+    description: 'Get platform info (for testing)',
     group: ENDPOINT_GROUPS.UTILITY,
   },
 };
 
+// ---------- Export helpers ----------
 export const getApiEndpointsInfo = (): Record<string, ApiEndpointInfo> => apiEndpoints;
 
 export const logAvailableEndpoints = (loggerInstance: any): void => {
@@ -320,35 +399,22 @@ export const logAvailableEndpoints = (loggerInstance: any): void => {
       description: info.description,
       group: info.group,
       auth: info.requiresAuth ? 'Required' : 'Optional',
-      apiKey: info.requiresApiKey ? 'Required' : 'Bypassed',
+      apiKey: info.requiresApiKey ? 'Required' : 'Optional',
     }));
 
-    // Group endpoints by category for logging
-    const groupedEndpoints: Record<string, typeof endpointList> = {};
-    Object.values(ENDPOINT_GROUPS).forEach(group => {
-      groupedEndpoints[group] = endpointList.filter(endpoint => endpoint.group === group);
+    // Group by category
+    const grouped: Record<string, typeof endpointList> = {};
+    Object.values(ENDPOINT_GROUPS).forEach(g => {
+      grouped[g] = endpointList.filter(e => e.group === g);
     });
 
     loggerInstance.info('📋 API Endpoints Registry Loaded', {
       total: Object.keys(endpoints).length,
-      groups: {
-        authentication: groupedEndpoints[ENDPOINT_GROUPS.AUTHENTICATION].length,
-        biometric: groupedEndpoints[ENDPOINT_GROUPS.BIOMETRIC].length,
-        oauth: groupedEndpoints[ENDPOINT_GROUPS.OAUTH].length,
-        session: groupedEndpoints[ENDPOINT_GROUPS.SESSION].length,
-        twoFactor: groupedEndpoints[ENDPOINT_GROUPS.TWO_FACTOR].length,
-        health: groupedEndpoints[ENDPOINT_GROUPS.HEALTH].length,
-        utility: groupedEndpoints[ENDPOINT_GROUPS.UTILITY].length,
-      },
-      publicEndpoints: Object.keys(endpoints).filter(key => !endpoints[key].requiresApiKey).length,
-      protectedEndpoints: Object.keys(endpoints).filter(key => endpoints[key].requiresApiKey)
-        .length,
-      endpointsByGroup: groupedEndpoints,
+      groups: Object.fromEntries(Object.entries(grouped).map(([k, v]) => [k, v.length])),
     });
-  } catch (error) {
+  } catch (err) {
     loggerInstance.error('Failed to load API endpoints registry', {
-      error: (error as Error).message,
-      stack: (error as Error).stack,
+      error: (err as Error).message,
     });
   }
 };

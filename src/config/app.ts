@@ -1,3 +1,4 @@
+import path from 'path';
 import compression from 'compression';
 import cors from 'cors';
 import type { Express, Request, Response } from 'express';
@@ -14,7 +15,13 @@ import logger, { morganStream } from './logger';
 import passport from './passport';
 
 const app: Express = express();
+// Serve static files from src directory
+app.use(express.static(path.join(__dirname, '..')));
 
+// Root route serves the chat interface
+app.get('/', (_req, res) => {
+  res.sendFile(path.join(__dirname, '../index.html'));
+});
 // ==================== MIDDLEWARE SETUP ====================
 
 // CORS

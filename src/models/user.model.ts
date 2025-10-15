@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import type { IUserDocument } from '../types';
+import type { IUserDocument } from '../types/auth.types';
 import { comparePassword, hashPassword } from '../utils';
 
 const userSchema = new Schema<IUserDocument>(
@@ -180,6 +180,10 @@ const userSchema = new Schema<IUserDocument>(
         type: Boolean,
         default: false,
       },
+      e2eEncryption: {
+        type: Boolean,
+        default: true,
+      },
     },
     deviceTokens: [
       {
@@ -335,6 +339,35 @@ const userSchema = new Schema<IUserDocument>(
         },
       },
     ],
+    // E2E Encryption Keys
+    publicKey: {
+      type: String,
+      default: '',
+      // required: true,
+    },
+    privateKeyEncrypted: {
+      type: String,
+      select: false,
+    },
+    keySalt: {
+      type: String,
+      select: false,
+    },
+    // Encryption settings
+    encryptionSettings: {
+      algorithm: {
+        type: String,
+        default: 'x25519-xsalsa20-poly1305',
+      },
+      keyRotationInterval: {
+        type: Number,
+        default: 30 * 24 * 60 * 60 * 1000, // 30 days in milliseconds
+      },
+      lastKeyRotation: {
+        type: Date,
+        default: Date.now,
+      },
+    },
   },
   {
     timestamps: true,
@@ -348,6 +381,8 @@ userSchema.index({ isLocked: 1, lockUntil: 1 });
 userSchema.index({ 'activeSessions.sessionId': 1 });
 userSchema.index({ twoFactorEnabled: 1 });
 userSchema.index({ 'credentials.credentialID': 1 });
+userSchema.index({ publicKey: 1 });
+userSchema.index({ 'encryptionSettings.lastKeyRotation': 1 });
 
 userSchema.pre('save', async function (next) {
   if (this.isModified('password') && this.password) {
@@ -365,6 +400,15 @@ userSchema.methods.comparePassword = async function (candidatePassword: string):
     return false;
   }
   return comparePassword(candidatePassword, this.password);
+};
+
+// Method to check if keys need rotation
+userSchema.methods.needsKeyRotation = function (): boolean {
+  const now = new Date();
+  const lastRotation = this.encryptionSettings.lastKeyRotation;
+  const rotationInterval = this.encryptionSettings.keyRotationInterval;
+
+  return now.getTime() - lastRotation.getTime() > rotationInterval;
 };
 
 export const User = mongoose.model<IUserDocument>('User', userSchema);

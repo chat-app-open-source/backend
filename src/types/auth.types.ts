@@ -25,6 +25,8 @@ export interface IUser {
   gender?: 'male' | 'female' | 'other';
   language: string;
   country?: string;
+
+  /** Privacy Settings */
   privacySettings: {
     lastSeen: 'everyone' | 'contacts' | 'nobody';
     profilePhoto: 'everyone' | 'contacts' | 'nobody';
@@ -33,6 +35,8 @@ export interface IUser {
     typingIndicators: boolean;
     onlineStatus: boolean;
   };
+
+  /** Notification Settings */
   notificationSettings: {
     messages: boolean;
     groupMessages: boolean;
@@ -42,36 +46,48 @@ export interface IUser {
     vibration: boolean;
     pushNotifications: boolean;
   };
+
+  /** Security Settings */
   securitySettings: {
     loginAlerts: boolean;
     passwordChangeAlerts: boolean;
     newDeviceAlerts: boolean;
     suspiciousActivityAlerts: boolean;
     biometricLogin: boolean;
+    e2eEncryption: boolean;
   };
+
+  /** Device tokens for push notifications */
   deviceTokens: Array<{
     token: string;
     platform: 'web' | 'android' | 'ios';
     createdAt: Date;
   }>;
+
   subscribedTopics: string[];
   contacts: mongoose.Types.ObjectId[];
   blockedUsers: mongoose.Types.ObjectId[];
   groups: mongoose.Types.ObjectId[];
   callHistory: mongoose.Types.ObjectId[];
+
   createdAt: Date;
   updatedAt: Date;
+
+  /** Account lock information */
   isLocked: boolean;
   lockUntil?: Date;
   lockReason?: 'excessive_failed_attempts' | 'excessive_successful_logins';
   lockCount: number;
-  // 2FA Fields
+
+  /** Two-Factor Authentication */
   twoFactorEnabled: boolean;
   twoFactorSecret?: string;
   twoFactorBackupCodes?: string[];
-  // WebAuthn Credentials for Biometric
+
+  /** WebAuthn / Biometric credentials */
   credentials: Credential[];
-  // Session Management
+
+  /** Session Management */
   activeSessions?: Array<{
     sessionId: string;
     deviceType: 'web' | 'mobile' | 'desktop';
@@ -80,19 +96,34 @@ export interface IUser {
     lastActivity: Date;
     createdAt: Date;
   }>;
+
+  /** End-to-End Encryption Keys (X25519) */
+  publicKey: string; // base64
+  privateKeyEncrypted: string; // encrypted private key
+  keySalt: string; // salt for key derivation
+
+  /** Encryption settings metadata */
+  encryptionSettings: {
+    algorithm: string;
+    keyRotationInterval: number;
+    lastKeyRotation: Date;
+  };
 }
 
 export interface IUserDocument extends IUser, mongoose.Document {
   _id: mongoose.Types.ObjectId;
   id: string;
   comparePassword(candidatePassword: string): Promise<boolean>;
+  needsKeyRotation(): boolean;
 }
 
+/** JWT Auth Tokens */
 export interface IAuthTokens {
   accessToken: string;
   refreshToken: string;
 }
 
+/** OAuth login info */
 export interface IOAuthUser {
   oauthId: string;
   email: string;
@@ -107,6 +138,7 @@ export interface ITokenPayload {
   exp?: number;
 }
 
+/** Google OAuth profile */
 export interface GoogleProfile {
   id: string;
   displayName: string;
@@ -124,6 +156,7 @@ export interface GoogleProfile {
   provider: string;
 }
 
+/** Facebook OAuth profile */
 export interface FacebookProfile {
   id: string;
   displayName: string;
@@ -140,6 +173,7 @@ export interface FacebookProfile {
   provider: string;
 }
 
+/** Platform detection */
 export type PlatformType = 'web' | 'mobile' | 'desktop' | 'unknown';
 
 export interface PlatformRequest extends Request {
@@ -151,7 +185,7 @@ export interface PlatformRequest extends Request {
   };
 }
 
-// 2FA Types
+/** Two-Factor Authentication setup */
 export interface TwoFactorSetup {
   secret: string;
   qrCode: string;
@@ -163,7 +197,7 @@ export interface TwoFactorVerification {
   backupCodes: string[];
 }
 
-// Rate Limiting Types
+/** Rate Limiting Config */
 export interface RateLimitConfig {
   maxAttempts: number;
   windowMs: number;
@@ -177,7 +211,7 @@ export interface RateLimitResult {
   retryAfter?: number;
 }
 
-// Session Types
+/** Session Info */
 export interface UserSession {
   sessionId: string;
   userId: string;

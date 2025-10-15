@@ -54,24 +54,42 @@ export interface EnvConfig {
   sessionTTLDays: number;
   inactiveSessionTimeoutMinutes: number;
 
-  // Encryption
-  encryptionKey: string;
-
-  // Logging
-  logLevel: string;
-  mockOAuthEnabled: boolean;
-
-  // Cleanup
-  apiAttemptRetentionDays: number;
-  loginAttemptRetentionDays: number;
-
-  // WebAuthn Configuration for Biometric (Passkeys)
+  // WebAuthn Configuration (Passkeys)
   rpId: string;
   rpName: string;
   origin: string;
   expectedOrigins: string[];
   userVerification: string;
   attestationType: string;
+
+  // Chat & Media Settings
+  maxGroupMembers: number;
+  maxFileSize: number;
+  allowedFileTypes: string[];
+  uploadLimit: string;
+
+  // WebRTC Settings
+  turnServerUrl: string;
+  turnServerUsername: string;
+  turnServerPassword: string;
+
+  // AWS S3
+  awsAccessKeyId: string;
+  awsSecretAccessKey: string;
+  awsRegion: string;
+  awsS3Bucket: string;
+
+  // Storage Selection
+  defaultStorage: 'firebase' | 's3';
+
+  // Encryption & Logging
+  encryptionKey: string;
+  logLevel: string;
+  mockOAuthEnabled: boolean;
+
+  // Cleanup
+  apiAttemptRetentionDays: number;
+  loginAttemptRetentionDays: number;
 }
 
 export interface OAuthConfig {

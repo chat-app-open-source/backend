@@ -2,7 +2,6 @@ import path from 'path';
 import dotenv from 'dotenv';
 import type { EnvConfig, OAuthConfig } from '../types';
 
-// Load environment variables ONCE here
 const envFile = process.env.NODE_ENV === 'prod' ? '.env' : '.env.dev';
 dotenv.config({ path: path.resolve(process.cwd(), envFile) });
 
@@ -17,7 +16,7 @@ export const envConfig: EnvConfig = {
   // JWT Configuration
   jwtSecret: process.env.JWT_SECRET || '',
   jwtRefreshSecret: process.env.JWT_REFRESH_SECRET || '',
-  jwtExpire: process.env.JWT_EXPIRE || '1h',
+  jwtExpire: process.env.JWT_EXPIRE || '15m',
   jwtRefreshExpire: process.env.JWT_REFRESH_EXPIRE || '7d',
 
   // Email Configuration
@@ -42,7 +41,7 @@ export const envConfig: EnvConfig = {
   storageBucket: process.env.STORAGE_BUCKET || '',
 
   // Redis Configuration
-  redisHost: process.env.REDIS_HOST || 'redis',
+  redisHost: process.env.REDIS_HOST || 'localhost',
   redisPort: parseInt(process.env.REDIS_PORT || '6379', 10),
   redisPassword: process.env.REDIS_PASSWORD || 'chatapp_redis_2025',
 
@@ -70,6 +69,34 @@ export const envConfig: EnvConfig = {
   userVerification: process.env.USER_VERIFICATION || 'required',
   attestationType: process.env.ATTESTATION_TYPE || 'none',
 
+  // Chat & Media Settings
+  maxGroupMembers: parseInt(process.env.MAX_GROUP_MEMBERS || '100', 10),
+  maxFileSize: parseInt(process.env.MAX_FILE_SIZE || '52428800', 10),
+  allowedFileTypes: process.env.ALLOWED_FILE_TYPES?.split(',') || [
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'video/mp4',
+    'audio/mpeg',
+    'application/pdf',
+  ],
+  uploadLimit: process.env.UPLOAD_LIMIT || '50mb',
+
+  // WebRTC Settings
+  turnServerUrl: process.env.TURN_SERVER_URL || '',
+  turnServerUsername: process.env.TURN_SERVER_USERNAME || '',
+  turnServerPassword: process.env.TURN_SERVER_PASSWORD || '',
+
+  // AWS S3 Configuration
+  awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+  awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+  awsRegion: process.env.AWS_REGION || 'us-east-1',
+  awsS3Bucket: process.env.AWS_S3_BUCKET || '',
+
+  // Storage Selection
+  defaultStorage: (process.env.DEFAULT_STORAGE as 'firebase' | 's3') || 'firebase',
+
+  // Encryption & Logging
   encryptionKey: process.env.ENCRYPTION_KEY || '',
   logLevel: process.env.LOG_LEVEL || 'info',
   mockOAuthEnabled: process.env.MOCK_OAUTH_ENABLED === 'true',
