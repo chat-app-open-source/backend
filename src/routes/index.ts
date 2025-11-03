@@ -8,6 +8,7 @@ import meetingRoutes from './meeting.routes';
 import sessionRoutes from './session.routes';
 import storyRoutes from './story.routes';
 import twoFactorRoutes from './twoFactor.routes';
+import userRoutes from './user.routes';
 
 const router = Router();
 
@@ -21,5 +22,6 @@ router.use('/calls', callRoutes);
 router.use('/meetings', meetingRoutes);
 router.use('/stories', storyRoutes);
 router.use('/files', fileRoutes);
+router.use('/users', userRoutes);
 
 export default router;

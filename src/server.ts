@@ -1,4 +1,4 @@
-import http from 'http'; // or https for secure
+import http from 'http';
 import app from './config/app';
 import { envConfig } from './config/env';
 import { initializeFirebase } from './config/firebase';
