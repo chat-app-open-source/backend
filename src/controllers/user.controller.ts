@@ -13,7 +13,16 @@ import {
   updateProfilePicture,
   updateSecuritySettings,
   updateUserProfile,
-} from '../services/user.service';
+} from '../services';
+import type {
+  DeleteAccountResponse,
+  NotificationSettingsUpdateResponse,
+  PrivacySettingsUpdateResponse,
+  SecuritySettingsUpdateResponse,
+  StatusResponse,
+  UserResponse,
+  UsersResponse,
+} from '../types';
 import { errorResponse, successResponse } from '../utils';
 
 export const getProfile = async (req: Request, res: Response, next: NextFunction) => {
@@ -29,10 +38,12 @@ export const getProfile = async (req: Request, res: Response, next: NextFunction
     const userId = req.user.id;
     const user = await getUserProfile(userId);
 
+    const response: UserResponse = { user };
+
     return successResponse({
       res,
       message: 'Profile retrieved successfully',
-      data: { user },
+      data: response,
     });
   } catch (error: unknown) {
     const err = error as Error;
@@ -50,10 +61,12 @@ export const getProfileById = async (req: Request, res: Response, next: NextFunc
 
     const user = await getUserById(userId);
 
+    const response: UserResponse = { user };
+
     return successResponse({
       res,
       message: 'User profile retrieved successfully',
-      data: { user },
+      data: response,
     });
   } catch (error: unknown) {
     const err = error as Error;
@@ -78,10 +91,12 @@ export const updateProfile = async (req: Request, res: Response, next: NextFunct
     const userId = req.user.id;
     const user = await updateUserProfile(userId, req.body);
 
+    const response: UserResponse = { user };
+
     return successResponse({
       res,
       message: 'Profile updated successfully',
-      data: { user },
+      data: response,
     });
   } catch (error: unknown) {
     const err = error as Error;
@@ -106,10 +121,14 @@ export const updatePrivacy = async (req: Request, res: Response, next: NextFunct
     const userId = req.user.id;
     const user = await updatePrivacySettings(userId, req.body);
 
+    const response: PrivacySettingsUpdateResponse = {
+      privacySettings: user.privacySettings,
+    };
+
     return successResponse({
       res,
       message: 'Privacy settings updated successfully',
-      data: { privacySettings: user.privacySettings },
+      data: response,
     });
   } catch (error: unknown) {
     const err = error as Error;
@@ -134,10 +153,14 @@ export const updateNotifications = async (req: Request, res: Response, next: Nex
     const userId = req.user.id;
     const user = await updateNotificationSettings(userId, req.body);
 
+    const response: NotificationSettingsUpdateResponse = {
+      notificationSettings: user.notificationSettings,
+    };
+
     return successResponse({
       res,
       message: 'Notification settings updated successfully',
-      data: { notificationSettings: user.notificationSettings },
+      data: response,
     });
   } catch (error: unknown) {
     const err = error as Error;
@@ -162,10 +185,14 @@ export const updateSecurity = async (req: Request, res: Response, next: NextFunc
     const userId = req.user.id;
     const user = await updateSecuritySettings(userId, req.body);
 
+    const response: SecuritySettingsUpdateResponse = {
+      securitySettings: user.securitySettings,
+    };
+
     return successResponse({
       res,
       message: 'Security settings updated successfully',
-      data: { securitySettings: user.securitySettings },
+      data: response,
     });
   } catch (error: unknown) {
     const err = error as Error;
@@ -190,13 +217,15 @@ export const setStatus = async (req: Request, res: Response, next: NextFunction)
     const userId = req.user.id;
     const user = await updateOnlineStatus(userId, req.body);
 
+    const response: StatusResponse = {
+      status: user.status,
+      lastSeen: user.lastSeen,
+    };
+
     return successResponse({
       res,
       message: 'Status updated successfully',
-      data: {
-        status: user.status,
-        lastSeen: user.lastSeen,
-      },
+      data: response,
     });
   } catch (error: unknown) {
     const err = error as Error;
@@ -221,10 +250,12 @@ export const deleteAccount = async (req: Request, res: Response, next: NextFunct
     const userId = req.user.id;
     const result = await deleteUserAccount(userId, req.body);
 
+    const response: DeleteAccountResponse = result;
+
     return successResponse({
       res,
       message: result.message,
-      data: { deleted: true },
+      data: response,
     });
   } catch (error: unknown) {
     const err = error as Error;
@@ -271,14 +302,16 @@ export const search = async (req: Request, res: Response, next: NextFunction) =>
 
     const users = await searchUsers(query as string, limit ? Number(limit) : 20);
 
+    const response: UsersResponse = {
+      users,
+      query: query as string,
+      count: users.length,
+    };
+
     return successResponse({
       res,
       message: 'Users found successfully',
-      data: {
-        users,
-        query,
-        count: users.length,
-      },
+      data: response,
     });
   } catch (error: unknown) {
     const err = error as Error;
@@ -317,10 +350,12 @@ export const updateProfilePictureController = async (
 
     const user = await updateProfilePicture(userId, profilePictureUrl);
 
+    const response: UserResponse = { user };
+
     return successResponse({
       res,
       message: 'Profile picture updated successfully',
-      data: { user },
+      data: response,
     });
   } catch (error: unknown) {
     const err = error as Error;
@@ -359,10 +394,12 @@ export const updateCoverPhotoController = async (
 
     const user = await updateCoverPhoto(userId, coverPhotoUrl);
 
+    const response: UserResponse = { user };
+
     return successResponse({
       res,
       message: 'Cover photo updated successfully',
-      data: { user },
+      data: response,
     });
   } catch (error: unknown) {
     const err = error as Error;

@@ -15,4 +15,5 @@ export * from './socket.service';
 export * from './story.service';
 export * from './token.service';
 export * from './twoFactor.service';
+export * from './user.service';
 export * from './webauthn.service';

@@ -5,4 +5,5 @@ export * from './common.types';
 export * from './env.types';
 export * from './file.types';
 export * from './meeting.types';
+export * from './userReponse.types';
 export * from './webauthn.types';

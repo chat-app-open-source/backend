@@ -12,12 +12,13 @@ import {
   updateProfileSchema,
   updateSecuritySchema,
   updateStatusSchema,
-} from '../schemas/user.schema';
-import type { IUserDocument } from '../types';
+} from '../schemas';
+import { DeleteAccountResponse, TransformedUser } from '../types';
+import { transformUserForResponse } from '../utils';
 import { E2EEncryptionService } from './encryption.service';
 import { PushNotificationService } from './pushNotification.service';
 
-export const getUserProfile = async (userId: string): Promise<IUserDocument> => {
+export const getUserProfile = async (userId: string): Promise<TransformedUser> => {
   if (!mongoose.Types.ObjectId.isValid(userId)) {
     throw new Error('Invalid user ID');
   }
@@ -30,10 +31,15 @@ export const getUserProfile = async (userId: string): Promise<IUserDocument> => 
     throw new Error('User not found');
   }
 
-  return user;
+  const transformedUser = transformUserForResponse(user);
+  if (!transformedUser) {
+    throw new Error('Failed to transform user data');
+  }
+
+  return transformedUser;
 };
 
-export const getUserById = async (userId: string): Promise<IUserDocument> => {
+export const getUserById = async (userId: string): Promise<TransformedUser> => {
   if (!mongoose.Types.ObjectId.isValid(userId)) {
     throw new Error('Invalid user ID');
   }
@@ -46,13 +52,18 @@ export const getUserById = async (userId: string): Promise<IUserDocument> => {
     throw new Error('User not found');
   }
 
-  return user;
+  const transformedUser = transformUserForResponse(user);
+  if (!transformedUser) {
+    throw new Error('Failed to transform user data');
+  }
+
+  return transformedUser;
 };
 
 export const updateUserProfile = async (
   userId: string,
   data: z.infer<typeof updateProfileSchema>,
-): Promise<IUserDocument> => {
+): Promise<TransformedUser> => {
   const validated = updateProfileSchema.parse(data);
 
   if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -103,13 +114,18 @@ export const updateUserProfile = async (
     updatedFields: Object.keys(validated),
   });
 
-  return updatedUser;
+  const transformedUser = transformUserForResponse(updatedUser);
+  if (!transformedUser) {
+    throw new Error('Failed to transform user data');
+  }
+
+  return transformedUser;
 };
 
 export const updatePrivacySettings = async (
   userId: string,
   data: z.infer<typeof updatePrivacySchema>,
-): Promise<IUserDocument> => {
+): Promise<TransformedUser> => {
   const validated = updatePrivacySchema.parse(data);
 
   if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -140,13 +156,19 @@ export const updatePrivacySettings = async (
   }
 
   logger.info('Privacy settings updated successfully', { userId });
-  return updatedUser;
+
+  const transformedUser = transformUserForResponse(updatedUser);
+  if (!transformedUser) {
+    throw new Error('Failed to transform user data');
+  }
+
+  return transformedUser;
 };
 
 export const updateNotificationSettings = async (
   userId: string,
   data: z.infer<typeof updateNotificationSchema>,
-): Promise<IUserDocument> => {
+): Promise<TransformedUser> => {
   const validated = updateNotificationSchema.parse(data);
 
   if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -177,13 +199,19 @@ export const updateNotificationSettings = async (
   }
 
   logger.info('Notification settings updated successfully', { userId });
-  return updatedUser;
+
+  const transformedUser = transformUserForResponse(updatedUser);
+  if (!transformedUser) {
+    throw new Error('Failed to transform user data');
+  }
+
+  return transformedUser;
 };
 
 export const updateSecuritySettings = async (
   userId: string,
   data: z.infer<typeof updateSecuritySchema>,
-): Promise<IUserDocument> => {
+): Promise<TransformedUser> => {
   const validated = updateSecuritySchema.parse(data);
 
   if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -214,13 +242,19 @@ export const updateSecuritySettings = async (
   }
 
   logger.info('Security settings updated successfully', { userId });
-  return updatedUser;
+
+  const transformedUser = transformUserForResponse(updatedUser);
+  if (!transformedUser) {
+    throw new Error('Failed to transform user data');
+  }
+
+  return transformedUser;
 };
 
 export const updateOnlineStatus = async (
   userId: string,
   data: z.infer<typeof updateStatusSchema>,
-): Promise<IUserDocument> => {
+): Promise<TransformedUser> => {
   const validated = updateStatusSchema.parse(data);
 
   if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -247,13 +281,18 @@ export const updateOnlineStatus = async (
     status: validated.status,
   });
 
-  return updatedUser;
+  const transformedUser = transformUserForResponse(updatedUser);
+  if (!transformedUser) {
+    throw new Error('Failed to transform user data');
+  }
+
+  return transformedUser;
 };
 
 export const deleteUserAccount = async (
   userId: string,
   data: z.infer<typeof deleteAccountSchema>,
-): Promise<{ message: string }> => {
+): Promise<DeleteAccountResponse> => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -306,7 +345,10 @@ export const deleteUserAccount = async (
       reason: data.reason,
     });
 
-    return { message: "Account deleted successfully. We're sorry to see you go." };
+    return {
+      message: "Account deleted successfully. We're sorry to see you go.",
+      deleted: true,
+    };
   } catch (error) {
     await session.abortTransaction();
     logger.error('Account deletion failed', {
@@ -370,7 +412,10 @@ export const rotateE2EKeys = async (userId: string, currentPassword: string): Pr
   }
 };
 
-export const searchUsers = async (query: string, limit: number = 20): Promise<IUserDocument[]> => {
+export const searchUsers = async (
+  query: string,
+  limit: number = 20,
+): Promise<TransformedUser[]> => {
   const validated = searchUsersSchema.parse({ q: query, limit });
 
   if (!validated.q || validated.q.trim().length < 2) {
@@ -400,13 +445,21 @@ export const searchUsers = async (query: string, limit: number = 20): Promise<IU
     results: users.length,
   });
 
-  return users;
+  const transformedUsers = users.map(user => {
+    const transformed = transformUserForResponse(user);
+    if (!transformed) {
+      throw new Error('Failed to transform user data');
+    }
+    return transformed;
+  });
+
+  return transformedUsers;
 };
 
 export const updateProfilePicture = async (
   userId: string,
   profilePictureUrl: string,
-): Promise<IUserDocument> => {
+): Promise<TransformedUser> => {
   if (!mongoose.Types.ObjectId.isValid(userId)) {
     throw new Error('Invalid user ID');
   }
@@ -422,13 +475,19 @@ export const updateProfilePicture = async (
   }
 
   logger.info('Profile picture updated successfully', { userId });
-  return updatedUser;
+
+  const transformedUser = transformUserForResponse(updatedUser);
+  if (!transformedUser) {
+    throw new Error('Failed to transform user data');
+  }
+
+  return transformedUser;
 };
 
 export const updateCoverPhoto = async (
   userId: string,
   coverPhotoUrl: string,
-): Promise<IUserDocument> => {
+): Promise<TransformedUser> => {
   if (!mongoose.Types.ObjectId.isValid(userId)) {
     throw new Error('Invalid user ID');
   }
@@ -444,5 +503,11 @@ export const updateCoverPhoto = async (
   }
 
   logger.info('Cover photo updated successfully', { userId });
-  return updatedUser;
+
+  const transformedUser = transformUserForResponse(updatedUser);
+  if (!transformedUser) {
+    throw new Error('Failed to transform user data');
+  }
+
+  return transformedUser;
 };
